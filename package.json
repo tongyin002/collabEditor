@@ -11,7 +11,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "simplemde": "^1.11.2"
+    "easymde": "^2.9.0"
   },
   "devDependencies": {
     "webpack": "^4.41.6",
