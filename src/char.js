@@ -13,6 +13,8 @@ class Char {
         this.siteID = siteID;
         this.siteCounter = siteCounter;
     }
+
+    //TODO(shirleyxt): Add compare between char to break tie.
 }
 
 /**

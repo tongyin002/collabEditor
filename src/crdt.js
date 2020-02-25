@@ -31,7 +31,7 @@ class CRDT {
      * @param {Char} char
      * @memberof CRDT
      */
-    insertChar(char, pos=-1) {
+    insertChar(char) {
         let position = this.lookupPositionByID(char);
         this.chars.splice(position, 0, char);
     }
@@ -42,9 +42,9 @@ class CRDT {
      * @returns{boolean} true if successfully delted, false otherwise.
      * @memberof CRDT
      */
-    deleteChar(char, pos=-1) {
+    deleteChar(char) {
         let position = this.lookupPositionByID(char); 
-        if (this.chars[position].id !== char.id) {
+        if (compare(this.chars[position], char) !== 0) {
             return false;
         }
         this.chars.splice(position, 1);       
@@ -110,13 +110,13 @@ class CRDT {
         let left = 0, right = this.chars.length - 1;
         while (left + 1 < right) {
             let mid = Math.floor((left + right) / 2);
-            if (compare(char.id, this.chars[mid].id) > 0) {
+            if (compare(char, this.chars[mid]) > 0) {
                 left = mid;
             } else {
                 right = mid;
             }
         }
-        if (compare(char.id, this.chars[left].id) <= 0) {
+        if (compare(char, this.chars[left]) <= 0) {
             return left;
         }
         return right;
