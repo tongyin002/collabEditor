@@ -1,8 +1,8 @@
-import SimpleMDE from "simplemde";
+import EasyMDE from "easymde";
 
 class Editor {
   constructor() {
-    this.canvas = new SimpleMDE({
+    this.canvas = new EasyMDE({
       element: document.getElementById("MyID"),
       toolbar: false
     });
