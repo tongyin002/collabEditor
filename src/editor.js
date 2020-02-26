@@ -3,7 +3,7 @@ import EasyMDE from "easymde";
 class Editor {
   constructor() {
     this.canvas = new EasyMDE({
-      element: document.getElementById("MyID"),
+      element: document.getElementById("editor"),
       toolbar: false
     });
 
