@@ -1,9 +1,9 @@
 import EasyMDE from "easymde";
 
 class Editor {
-  constructor() {
+  constructor(controller) {
     this.canvas = new EasyMDE({
-      element: document.getElementById("MyID"),
+      element: document.getElementById("editor"),
       toolbar: false
     });
 
@@ -15,26 +15,24 @@ class Editor {
       }
     });
 
+    this.controller = controller;
     this.readyForChangeEvents();
   }
 
   // binding events to current editor
   readyForChangeEvents() {
     this.canvas.codemirror.on("change", (_, changeObj) => {
-      console.log(changeObj.origin);
       switch (changeObj.origin) {
         case "redo":
-          this.redo(changeObj);
-          break;
         case "undo":
-          this.undo(changeObj);
+          this.callRedoUndo(changeObj);
           break;
         case "+input":
         case "paste":
-          this.insert(changeObj);
+          this.callInsert(changeObj);
           break;
         case "+delete":
-          this.delete(changeObj);
+          this.callDelete(changeObj);
           break;
         default:
           throw new Error(
@@ -44,18 +42,47 @@ class Editor {
     });
   }
 
-  redo(changeObj) {}
-
-  undo(changeObj) {}
-
-  insert(changeObj) {
-    let text = changeObj.text;
-    let from = changeObj.from;
-    let to = changeObj.to;
-    console.log(text, from, to);
+  textTransform(text) {
+    if (text.length === 2 && text[1] === "" && text[2] === "") {
+      // new line char entered
+      return "\n";
+    } else {
+      // multiline chars pasted
+      return text.join("\n");
+    }
   }
 
-  delete(changeObj) {}
+  callInsert(changeObj) {
+    this.callDelete(changeObj); // in case of paste (replaceing some chars in editor)
+    let text = this.textTransform(changeObj.text);
+    this.controller.localInsert(text, {
+      line: changeObj.from.line,
+      index: changeObj.from.ch
+    });
+  }
+
+  callDelete(changeObj) {
+    let text = this.textTransform(changeObj.removed);
+    this.controller.localDelete(
+      text,
+      {
+        line: changeObj.from.line,
+        index: changeObj.from.ch
+      },
+      {
+        line: changeObj.to.line,
+        index: changeObj.to.ch
+      }
+    );
+  }
+
+  callRedoUndo(changeObj) {
+    if (changeObj.removed.length > 0) {
+      this.callDelete(changeObj);
+    } else {
+      this.callInsert(changeObj);
+    }
+  }
 }
 
 export default Editor;

@@ -1,3 +1,6 @@
-import Editor from "./editor";
+import Controller from "./controller";
 
-let editor = new Editor();
+let controller = new Controller(
+  location.origin,
+  location.search.slice(1) || "0"
+);
