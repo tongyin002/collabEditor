@@ -15,12 +15,21 @@ class Controller {
   // create new editor
   createEditor() {}
 
-  // insert to editor
+  /**
+   * insert to editor
+   * @param {*} text string
+   * @param {*} from {line: <line #>, index: <index position>}
+   */
   localInsert(text, from) {
     console.log(text, from);
   }
 
-  // delete from editor
+  /**
+   *  delete from editor
+   * @param {*} text string
+   * @param {*} from {line: <line #>, index: <index position>}
+   * @param {*} to {line: <line #>, index: <index position>}
+   */
   localDelete(text, from, to) {
     console.log(text, from, to);
   }
