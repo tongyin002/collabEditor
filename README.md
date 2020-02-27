@@ -1,6 +1,4 @@
 # collabEditor
 
-npm install
-npm run build
-
-open html file
+npm i
+npm start
