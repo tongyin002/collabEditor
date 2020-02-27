@@ -10,10 +10,10 @@ class Controller {
   createEditor() {}
 
   // insert to editor
-  insert() {}
+  localInsert() {}
 
   // delete from editor
-  delete() {}
+  localDelete() {}
 
   broadcast(char) {}
 }
