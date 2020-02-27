@@ -42,15 +42,6 @@ class Editor {
     });
   }
 
-  callInsert(changeObj) {
-    this.callDelete(changeObj); // in case of paste (replaceing some chars in editor)
-    let text = this.textTransform(changeObj.text);
-    this.controller.localInsert(text, {
-      line: changeObj.from.line,
-      index: changeObj.from.ch
-    });
-  }
-
   textTransform(text) {
     if (text.length === 2 && text[1] === "" && text[2] === "") {
       // new line char entered
@@ -59,6 +50,15 @@ class Editor {
       // multiline chars pasted
       return text.join("\n");
     }
+  }
+
+  callInsert(changeObj) {
+    this.callDelete(changeObj); // in case of paste (replaceing some chars in editor)
+    let text = this.textTransform(changeObj.text);
+    this.controller.localInsert(text, {
+      line: changeObj.from.line,
+      index: changeObj.from.ch
+    });
   }
 
   callDelete(changeObj) {
