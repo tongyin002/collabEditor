@@ -18,20 +18,26 @@ class Controller {
   /**
    * insert to editor
    * @param {*} text string
-   * @param {*} from {line: <line #>, index: <index position>}
+   * @param {*} from
    */
   localInsert(text, from) {
-    console.log(text, from);
+    this.crdt.insertChar(this.crdt.generateChar(from, text));
+    this.updateEditor();
   }
 
   /**
    *  delete from editor
    * @param {*} text string
-   * @param {*} from {line: <line #>, index: <index position>}
-   * @param {*} to {line: <line #>, index: <index position>}
+   * @param {*} from
+   * @param {*} to 
    */
   localDelete(text, from, to) {
-    console.log(text, from, to);
+    this.crdt.deleteChar(this.crdt.lookupCharByPosition(from));
+    this.updateEditor();
+  }
+
+  updateEditor() {
+    this.editor.canvas.codemirror.getDoc().setValue(this.crdt.toText());
   }
 
   broadcast(char) {}

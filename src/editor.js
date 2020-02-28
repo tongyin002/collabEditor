@@ -55,24 +55,16 @@ class Editor {
   callInsert(changeObj) {
     this.callDelete(changeObj); // in case of paste (replaceing some chars in editor)
     let text = this.textTransform(changeObj.text);
-    this.controller.localInsert(text, {
-      line: changeObj.from.line,
-      index: changeObj.from.ch
-    });
+    const pos = this.canvas.codemirror.getDoc().indexFromPos(changeObj.from);
+    this.controller.localInsert(text, pos);
   }
 
   callDelete(changeObj) {
     let text = this.textTransform(changeObj.removed);
     this.controller.localDelete(
       text,
-      {
-        line: changeObj.from.line,
-        index: changeObj.from.ch
-      },
-      {
-        line: changeObj.to.line,
-        index: changeObj.to.ch
-      }
+      this.canvas.codemirror.getDoc().indexFromPos(changeObj.from),
+      this.canvas.codemirror.getDoc().indexFromPos(changeObj.to)
     );
   }
 
@@ -86,3 +78,4 @@ class Editor {
 }
 
 export default Editor;
+
