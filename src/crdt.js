@@ -59,7 +59,7 @@ class CRDT {
      * @memberof CRDT
      */
     lookupCharByPosition(pos) {
-        return pos >= chars.length || pos < 0 ? null : chars[pos];
+        return pos >= this.chars.length || pos < 0 ? null : this.chars[pos];
     }
 
     /**

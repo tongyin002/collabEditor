@@ -1,7 +1,7 @@
 /**
  * 
  */
-class Char {
+export class Char {
     /**
      * 
      * @param {Array<number>} id Unique id, used in CRDT.
@@ -11,7 +11,7 @@ class Char {
         this.id = id;
         this.value = value;
         this.siteID = siteID;
-        this.sideCounter = sideCounter;
+        this.siteCounter = siteCounter;
     }
 }
 
@@ -37,4 +37,3 @@ export function compare (charA, charB) {
     return aLen > bLen ? 1 : -1;
 }
 
-export default Char;

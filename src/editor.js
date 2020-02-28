@@ -1,9 +1,9 @@
 import EasyMDE from "easymde";
 
 class Editor {
-  constructor(controller) {
+  constructor(controller, elementId) {
     this.canvas = new EasyMDE({
-      element: document.getElementById("editor"),
+      element: document.getElementById(elementId),
       toolbar: false
     });
 
@@ -34,6 +34,10 @@ class Editor {
         case "+delete":
           this.callDelete(changeObj);
           break;
+        case "setValue":
+          // Used to update value;
+          console.log("setting value");
+          break;
         default:
           throw new Error(
             "Operation " + changeObj.origin + " is not supported!"
@@ -53,7 +57,7 @@ class Editor {
   }
 
   callInsert(changeObj) {
-    this.callDelete(changeObj); // in case of paste (replaceing some chars in editor)
+    // this.callDelete(changeObj); // in case of paste (replaceing some chars in editor)
     let text = this.textTransform(changeObj.text);
     const pos = this.canvas.codemirror.getDoc().indexFromPos(changeObj.from);
     this.controller.localInsert(text, pos);
