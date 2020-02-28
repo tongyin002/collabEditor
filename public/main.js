@@ -17966,6 +17966,9 @@ class editor_Editor {
   readyForChangeEvents() {
     this.canvas.codemirror.on("change", (_, changeObj) => {
       switch (changeObj.origin) {
+        case undefined:
+        case "setValue":
+          return;
         case "redo":
         case "undo":
           this.callRedoUndo(changeObj);
@@ -18000,7 +18003,9 @@ class editor_Editor {
   }
 
   callInsert(changeObj) {
-    // this.callDelete(changeObj); // in case of paste (replaceing some chars in editor)
+    if (changeObj.removed.length > 0 && changeObj.removed[0].length > 0) {
+      this.callDelete(changeObj); // in case of paste (replaceing some chars in editor)
+    }
     let text = this.textTransform(changeObj.text);
     const pos = this.canvas.codemirror.getDoc().indexFromPos(changeObj.from);
     this.controller.localInsert(text, pos);
@@ -18021,6 +18026,59 @@ class editor_Editor {
     } else {
       this.callInsert(changeObj);
     }
+  }
+
+  workOnInsertOrder(text, from, to) {
+    let cursorPos = this.canvas.codemirror.getCursor();
+    let diff = this.getPosDiff(text);
+
+    this.canvas.codemirror.replaceRange(text, from, to);
+
+    // update cursor position
+    if (cursorPos.line > to.line) {
+      cursorPos.line += diff.line;
+    } else if (cursorPos.line === to.line && cursorPos.ch > to.ch) {
+      if (diff.line > 0) {
+        cursorPos.line += diff.line;
+        cursorPos.ch -= to.ch;
+      }
+      cursorPos.ch += diff.ch;
+    }
+
+    this.canvas.codemirror.setCursor(cursorPos);
+  }
+
+  getPosDiff(text) {
+    let ret = { line: 0, ch: 0 };
+    for (let i = 0; i < text.length; i++) {
+      if (text[i] === "\n") {
+        ret.line++;
+        ret.ch = 0;
+      } else {
+        ret.ch++;
+      }
+    }
+    return ret;
+  }
+
+  workOnDeleteOrder(text, from, to) {
+    let cursorPos = this.canvas.codemirror.getCursor();
+    let diff = this.getPosDiff(text);
+
+    this.canvas.codemirror.replaceRange("", from, to);
+
+    //update cursor position
+    if (cursorPos.line > to.line) {
+      cursorPos.line -= diff.line;
+    } else if (cursorPos.line == to.line && cursorPos.ch > to.ch) {
+      if (diff.line > 0) {
+        cursorPos.line -= diff.line;
+        cursorPos.ch += from.ch;
+      }
+      cursorPos.ch -= diff.ch;
+    }
+
+    this.canvas.codemirror.setCursor(cursorPos);
   }
 }
 
@@ -18426,6 +18484,10 @@ let controller1 = new src_controller(
   "editor2",
   broadcastService
 );
+// debug
+let src_editor = controller0.editor;
+let cm = src_editor.canvas.codemirror;
+
 
 /***/ })
 /******/ ]);
