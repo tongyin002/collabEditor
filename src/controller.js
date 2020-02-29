@@ -59,7 +59,9 @@ class Controller {
   }
 
   updateEditor() {
+    const cursor = this.editor.canvas.codemirror.getCursor();
     this.editor.canvas.codemirror.getDoc().setValue(this.crdt.toText());
+    this.editor.canvas.codemirror.setCursor(cursor);
   }
 
   broadcast(char) {}

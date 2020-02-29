@@ -18362,22 +18362,6 @@ class crdt_CRDT {
 }
 
 /* harmony default export */ var crdt = (crdt_CRDT);
-
-// let crdt = new CRDT();
-// let a = crdt.generateChar(0, a);
-// let b = crdt.generateChar(1, b);
-// let c = crdt.generateChar(1, c);
-// let d = crdt.generateChar(0, d);
-// crdt.insertChar(a);
-// crdt.insertChar(b);
-// crdt.insertChar(c);
-// crdt.insertChar(d);
-
-// console.log(crdt.chars);
-
-
-
-
 // EXTERNAL MODULE: ./node_modules/peerjs/dist/peerjs.min.js
 var peerjs_min = __webpack_require__(12);
 var peerjs_min_default = /*#__PURE__*/__webpack_require__.n(peerjs_min);
@@ -18492,7 +18476,9 @@ class controller_Controller {
   }
 
   updateEditor() {
+    const cursor = this.editor.canvas.codemirror.getCursor();
     this.editor.canvas.codemirror.getDoc().setValue(this.crdt.toText());
+    this.editor.canvas.codemirror.setCursor(cursor);
   }
 
   broadcast(char) {}
