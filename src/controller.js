@@ -50,7 +50,10 @@ class Controller {
    * @param {*} to 
    */
   localDelete(text, from, to) {
-    for (let pos = from; pos <= to; pos++) {
+    let pos = from;
+    console.log(`from: ${from}, to: ${to}`);
+    for (let i = from; i < to; i++) {
+      console.log(`intended position: ${pos}`);
       const char = this.crdt.lookupCharByPosition(pos);
       this.crdt.deleteChar(char);
       this.broadcastService.broadcast("delete", char, this.siteId);

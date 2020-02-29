@@ -70,11 +70,9 @@ class Editor {
 
   callDelete(changeObj) {
     let text = this.textTransform(changeObj.removed);
-    this.controller.localDelete(
-      text,
-      this.canvas.codemirror.getDoc().indexFromPos(changeObj.from),
-      this.canvas.codemirror.getDoc().indexFromPos(changeObj.to)
-    );
+    const from = this.canvas.codemirror.getDoc().indexFromPos(changeObj.from);
+    const to = from + text.length;
+    this.controller.localDelete(text, from, to);
   }
 
   callRedoUndo(changeObj) {

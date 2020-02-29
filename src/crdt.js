@@ -33,9 +33,6 @@ class CRDT {
      */
     insertChar(char) {
         let position = this.lookupPositionByID(char);
-        console.log(position);
-        console.log(char);
-        this.logChars();
         this.chars.splice(position, 0, char);
     }
 
@@ -47,6 +44,7 @@ class CRDT {
      */
     deleteChar(char) {
         let position = this.lookupPositionByID(char);
+        console.log(`looked up position: ${position}`);
         if (compare(this.chars[position], char) !== 0) {
             return false;
         }

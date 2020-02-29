@@ -18013,10 +18013,11 @@ class editor_Editor {
 
   callDelete(changeObj) {
     let text = this.textTransform(changeObj.removed);
+    const from = 
+    this.canvas.codemirror.getDoc().indexFromPos(changeObj.from);
+    const to = from + text.length;
     this.controller.localDelete(
-      text,
-      this.canvas.codemirror.getDoc().indexFromPos(changeObj.from),
-      this.canvas.codemirror.getDoc().indexFromPos(changeObj.to)
+      text, from, to
     );
   }
 
@@ -18182,9 +18183,6 @@ class crdt_CRDT {
      */
     insertChar(char) {
         let position = this.lookupPositionByID(char);
-        console.log(position);
-        console.log(char);
-        this.logChars();
         this.chars.splice(position, 0, char);
     }
 
@@ -18196,6 +18194,7 @@ class crdt_CRDT {
      */
     deleteChar(char) {
         let position = this.lookupPositionByID(char);
+        console.log(`looked up position: ${position}`);
         if (compare(this.chars[position], char) !== 0) {
             return false;
         }
@@ -18467,7 +18466,10 @@ class controller_Controller {
    * @param {*} to 
    */
   localDelete(text, from, to) {
-    for (let pos = from; pos <= to; pos++) {
+    let pos = from;
+    console.log(`from: ${from}, to: ${to}`);
+    for (let i = from; i < to; i++) {
+      console.log(`intended position: ${pos}`);
       const char = this.crdt.lookupCharByPosition(pos);
       this.crdt.deleteChar(char);
       this.broadcastService.broadcast("delete", char, this.siteId);
