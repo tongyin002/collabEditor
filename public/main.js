@@ -18134,10 +18134,10 @@ function compare (charA, charB) {
     const aLen = charA.id.length;
     const bLen = charB.id.length;
     for (let i = 0; i < Math.min(aLen, bLen); i++) {
-        if (charA[i] === charB[i]) {
+        if (charA.id[i] === charB.id[i]) {
             continue;
         }
-        return charA[i] > charB[i] ? 1 : -1;
+        return charA.id[i] > charB.id[i] ? 1 : -1;
     }
     if (aLen === bLen) {
         return 0;
@@ -18161,11 +18161,11 @@ class crdt_CRDT {
      * @param {number} base maximum number of nodes in the first level
      * @memberof crdt
      */
-    constructor(boundry=10, base=32) {
+    constructor(boundry = 10, base = 32) {
         this.boundry = boundry;
         this.base = base;
         this.siteCounter = 0;
-        this.siteID = this.generateUUID(); 
+        this.siteID = this.generateUUID();
         this.strategyMap = new Map();
         /**
          * index represents the postion of the char.
@@ -18182,6 +18182,9 @@ class crdt_CRDT {
      */
     insertChar(char) {
         let position = this.lookupPositionByID(char);
+        console.log(position);
+        console.log(char);
+        this.logChars();
         this.chars.splice(position, 0, char);
     }
 
@@ -18192,11 +18195,11 @@ class crdt_CRDT {
      * @memberof CRDT
      */
     deleteChar(char) {
-        let position = this.lookupPositionByID(char); 
+        let position = this.lookupPositionByID(char);
         if (compare(this.chars[position], char) !== 0) {
             return false;
         }
-        this.chars.splice(position, 1);       
+        this.chars.splice(position, 1);
         return true;
     }
 
@@ -18223,8 +18226,8 @@ class crdt_CRDT {
         this.siteCounter++;
         const left = this.lookupCharByPosition(pos - 1);
         const right = this.lookupCharByPosition(pos);
-        const newID = this.generatesID(left == null? [] : left.id,
-            right==null? [] : right.id);
+        const newID = this.generateID(left == null ? [] : left.id,
+            right == null ? [] : right.id);
         return new Char(newID, val, this.siteID, this.siteCounter);
     }
 
@@ -18268,6 +18271,10 @@ class crdt_CRDT {
         if (compare(char, this.chars[left]) <= 0) {
             return left;
         }
+
+        if (compare(char, this.chars[right]) > 0) {
+            return right+1;
+        }
         return right;
     }
 
@@ -18280,14 +18287,14 @@ class crdt_CRDT {
      * @memberof crdt
      * @private
      */
-    generatesID(start, end) {
+    generateID(start, end) {
         let depth = 0, interval = 0;
         while (interval < 1) {
             interval = this.prefix(end, depth, false)[depth] - this.prefix(start, depth, true)[depth] - 1;
             depth++;
         }
         depth--;
-        let step = Math.min(this.boundry, interval);
+        let step = Math.min(this.boundry, interval) - 1;
         if (this.strategyMap.get(depth) == null) {
             this.strategyMap.set(depth, Math.floor(Math.random() * 2));
         }
@@ -18316,39 +18323,61 @@ class crdt_CRDT {
         let idCopy = [];
         let currBase = this.base;
         for (let i = 0; i <= depth; i++) {
-            if (id.length > i) {
+            if (id.length-1 === i && i !== depth && !isStart) {
+                idCopy.push(id[i]-1);
+            } else if (id.length > i) {
                 idCopy.push(id[i]);
             }
             else if (isStart) {
                 idCopy.push(0);
             }
             else {
-                idCopy.push(currBase - 1);
+                idCopy.push(currBase);
             }
             currBase *= 2;
         }
         return idCopy;
     }
 
-    generateUUID() { 
+    generateUUID() {
         var d = new Date().getTime();//Timestamp
-        var d2 = (performance && performance.now && (performance.now()*1000)) || 0;//Time in microseconds since page-load or 0 if unsupported
-        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+        var d2 = (performance && performance.now && (performance.now() * 1000)) || 0;//Time in microseconds since page-load or 0 if unsupported
+        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
             var r = Math.random() * 16;//random number between 0 and 16
-            if(d > 0){//Use timestamp until depleted
-                r = (d + r)%16 | 0;
-                d = Math.floor(d/16);
+            if (d > 0) {//Use timestamp until depleted
+                r = (d + r) % 16 | 0;
+                d = Math.floor(d / 16);
             } else {//Use microseconds since page-load if supported
-                r = (d2 + r)%16 | 0;
-                d2 = Math.floor(d2/16);
+                r = (d2 + r) % 16 | 0;
+                d2 = Math.floor(d2 / 16);
             }
             return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
         });
     }
 
+    logChars() {
+        console.log(this.chars);
+    }
+
 }
 
 /* harmony default export */ var crdt = (crdt_CRDT);
+
+// let crdt = new CRDT();
+// let a = crdt.generateChar(0, a);
+// let b = crdt.generateChar(1, b);
+// let c = crdt.generateChar(1, c);
+// let d = crdt.generateChar(0, d);
+// crdt.insertChar(a);
+// crdt.insertChar(b);
+// crdt.insertChar(c);
+// crdt.insertChar(d);
+
+// console.log(crdt.chars);
+
+
+
+
 // EXTERNAL MODULE: ./node_modules/peerjs/dist/peerjs.min.js
 var peerjs_min = __webpack_require__(12);
 var peerjs_min_default = /*#__PURE__*/__webpack_require__.n(peerjs_min);
@@ -18437,10 +18466,14 @@ class controller_Controller {
    * @param {*} from
    */
   localInsert(text, from) {
-    const char = this.crdt.generateChar(from, text)
-    this.crdt.insertChar(char);
+    let pos = from;
+    for (let i = 0; i < text.length; i++) {
+      const char = this.crdt.generateChar(pos, text[i])
+      this.crdt.insertChar(char);
+      this.broadcastService.broadcast("insert", char, this.siteId);
+      pos++;
+    }
     this.updateEditor();
-    this.broadcastService.broadcast("insert", char, this.siteId);
   }
 
   /**
@@ -18450,9 +18483,11 @@ class controller_Controller {
    * @param {*} to 
    */
   localDelete(text, from, to) {
-    const char = this.crdt.lookupCharByPosition(from);
-    this.crdt.deleteChar(char);
-    this.broadcastService.broadcast("delete", char, this.siteId);
+    for (let pos = from; pos <= to; pos++) {
+      const char = this.crdt.lookupCharByPosition(pos);
+      this.crdt.deleteChar(char);
+      this.broadcastService.broadcast("delete", char, this.siteId);
+    }
     this.updateEditor();
   }
 

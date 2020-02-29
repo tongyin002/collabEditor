@@ -1,4 +1,4 @@
-import {Char, compare} from './char';
+import { Char, compare } from './char';
 
 /**
  * @class CRDT
@@ -12,11 +12,11 @@ class CRDT {
      * @param {number} base maximum number of nodes in the first level
      * @memberof crdt
      */
-    constructor(boundry=10, base=32) {
+    constructor(boundry = 10, base = 32) {
         this.boundry = boundry;
         this.base = base;
         this.siteCounter = 0;
-        this.siteID = this.generateUUID(); 
+        this.siteID = this.generateUUID();
         this.strategyMap = new Map();
         /**
          * index represents the postion of the char.
@@ -33,6 +33,9 @@ class CRDT {
      */
     insertChar(char) {
         let position = this.lookupPositionByID(char);
+        console.log(position);
+        console.log(char);
+        this.logChars();
         this.chars.splice(position, 0, char);
     }
 
@@ -43,11 +46,11 @@ class CRDT {
      * @memberof CRDT
      */
     deleteChar(char) {
-        let position = this.lookupPositionByID(char); 
+        let position = this.lookupPositionByID(char);
         if (compare(this.chars[position], char) !== 0) {
             return false;
         }
-        this.chars.splice(position, 1);       
+        this.chars.splice(position, 1);
         return true;
     }
 
@@ -74,8 +77,8 @@ class CRDT {
         this.siteCounter++;
         const left = this.lookupCharByPosition(pos - 1);
         const right = this.lookupCharByPosition(pos);
-        const newID = this.generatesID(left == null? [] : left.id,
-            right==null? [] : right.id);
+        const newID = this.generateID(left == null ? [] : left.id,
+            right == null ? [] : right.id);
         return new Char(newID, val, this.siteID, this.siteCounter);
     }
 
@@ -119,6 +122,10 @@ class CRDT {
         if (compare(char, this.chars[left]) <= 0) {
             return left;
         }
+
+        if (compare(char, this.chars[right]) > 0) {
+            return right+1;
+        }
         return right;
     }
 
@@ -131,14 +138,14 @@ class CRDT {
      * @memberof crdt
      * @private
      */
-    generatesID(start, end) {
+    generateID(start, end) {
         let depth = 0, interval = 0;
         while (interval < 1) {
             interval = this.prefix(end, depth, false)[depth] - this.prefix(start, depth, true)[depth] - 1;
             depth++;
         }
         depth--;
-        let step = Math.min(this.boundry, interval);
+        let step = Math.min(this.boundry, interval) - 1;
         if (this.strategyMap.get(depth) == null) {
             this.strategyMap.set(depth, Math.floor(Math.random() * 2));
         }
@@ -167,34 +174,40 @@ class CRDT {
         let idCopy = [];
         let currBase = this.base;
         for (let i = 0; i <= depth; i++) {
-            if (id.length > i) {
+            if (id.length-1 === i && i !== depth && !isStart) {
+                idCopy.push(id[i]-1);
+            } else if (id.length > i) {
                 idCopy.push(id[i]);
             }
             else if (isStart) {
                 idCopy.push(0);
             }
             else {
-                idCopy.push(currBase - 1);
+                idCopy.push(currBase);
             }
             currBase *= 2;
         }
         return idCopy;
     }
 
-    generateUUID() { 
+    generateUUID() {
         var d = new Date().getTime();//Timestamp
-        var d2 = (performance && performance.now && (performance.now()*1000)) || 0;//Time in microseconds since page-load or 0 if unsupported
-        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+        var d2 = (performance && performance.now && (performance.now() * 1000)) || 0;//Time in microseconds since page-load or 0 if unsupported
+        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
             var r = Math.random() * 16;//random number between 0 and 16
-            if(d > 0){//Use timestamp until depleted
-                r = (d + r)%16 | 0;
-                d = Math.floor(d/16);
+            if (d > 0) {//Use timestamp until depleted
+                r = (d + r) % 16 | 0;
+                d = Math.floor(d / 16);
             } else {//Use microseconds since page-load if supported
-                r = (d2 + r)%16 | 0;
-                d2 = Math.floor(d2/16);
+                r = (d2 + r) % 16 | 0;
+                d2 = Math.floor(d2 / 16);
             }
             return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
         });
+    }
+
+    logChars() {
+        console.log(this.chars);
     }
 
 }

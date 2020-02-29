@@ -26,10 +26,10 @@ export function compare (charA, charB) {
     const aLen = charA.id.length;
     const bLen = charB.id.length;
     for (let i = 0; i < Math.min(aLen, bLen); i++) {
-        if (charA[i] === charB[i]) {
+        if (charA.id[i] === charB.id[i]) {
             continue;
         }
-        return charA[i] > charB[i] ? 1 : -1;
+        return charA.id[i] > charB.id[i] ? 1 : -1;
     }
     if (aLen === bLen) {
         return 0;

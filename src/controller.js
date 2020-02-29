@@ -33,10 +33,14 @@ class Controller {
    * @param {*} from
    */
   localInsert(text, from) {
-    const char = this.crdt.generateChar(from, text)
-    this.crdt.insertChar(char);
+    let pos = from;
+    for (let i = 0; i < text.length; i++) {
+      const char = this.crdt.generateChar(pos, text[i])
+      this.crdt.insertChar(char);
+      this.broadcastService.broadcast("insert", char, this.siteId);
+      pos++;
+    }
     this.updateEditor();
-    this.broadcastService.broadcast("insert", char, this.siteId);
   }
 
   /**
@@ -46,9 +50,11 @@ class Controller {
    * @param {*} to 
    */
   localDelete(text, from, to) {
-    const char = this.crdt.lookupCharByPosition(from);
-    this.crdt.deleteChar(char);
-    this.broadcastService.broadcast("delete", char, this.siteId);
+    for (let pos = from; pos <= to; pos++) {
+      const char = this.crdt.lookupCharByPosition(pos);
+      this.crdt.deleteChar(char);
+      this.broadcastService.broadcast("delete", char, this.siteId);
+    }
     this.updateEditor();
   }
 
