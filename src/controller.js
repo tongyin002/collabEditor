@@ -68,6 +68,63 @@ class Controller {
   }
 
   broadcast(char) {}
+
+  addToNetwork(peerId, siteId, doc=document)
+  {
+    if (!this.network.find(obj => obj.siteId === siteId)) {
+      this.network.push({ peerId, siteId });
+      if (siteId !== this.siteId) {
+        this.addToListOfPeers(siteId, peerId, doc);
+      }
+
+      this.broadcast.addToNetwork(peerId, siteId);
+    }
+  }
+
+
+  addToListOfPeers(siteId, peerId, doc=document) {
+    const listItem = doc.createElement('li');
+    const node = doc.createElement('span');
+
+// // purely for mock testing purposes
+    //   let parser;
+    //   if (typeof DOMParser === 'object') {
+    //     parser = new DOMParser();
+    //   } else {
+    //     parser = {
+    //       parseFromString: function() {
+    //         return { firstChild: doc.createElement('div') }
+    //       }
+    //     }
+    //   }
+
+    const parser = new DOMParser();
+
+    const color = generateItemFromHash(siteId, CSS_COLORS);
+    const name = generateItemFromHash(siteId, ANIMALS);
+
+    // COMMENTED OUT: Video editor does not work
+    // const phone = parser.parseFromString(Feather.icons.phone.toSvg({ class: 'phone' }), "image/svg+xml");
+    // const phoneIn = parser.parseFromString(Feather.icons['phone-incoming'].toSvg({ class: 'phone-in' }), "image/svg+xml");
+    // const phoneOut = parser.parseFromString(Feather.icons['phone-outgoing'].toSvg({ class: 'phone-out' }), "image/svg+xml");
+    // const phoneCall = parser.parseFromString(Feather.icons['phone-call'].toSvg({ class: 'phone-call' }), "image/svg+xml");
+
+    node.textContent = name;
+    node.style.backgroundColor = color;
+    node.classList.add('peer');
+
+    // this.attachVideoEvent(peerId, listItem);
+
+    listItem.id = peerId;
+    listItem.appendChild(node);
+    // listItem.appendChild(phone.firstChild);
+    // listItem.appendChild(phoneIn.firstChild);
+    // listItem.appendChild(phoneOut.firstChild);
+    // listItem.appendChild(phoneCall.firstChild);
+    doc.querySelector('#peerId').appendChild(listItem);
+  }
 }
+
+
 
 export default Controller;
