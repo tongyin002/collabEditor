@@ -9,19 +9,38 @@ class Controller {
     // TODO(shirleyxt): switch back siteId once finished testing.
     this.siteId = elementId;
     this.editor = new Editor(this, elementId);
-    this.broadcast = new BroadCast();
     this.crdt = new CRDT();
-    this.peer = new Peer();
-    this.broadcastService = boradcastService;
-    this.broadcastService.registerController(this.siteId,
-       (char)=> {
-         this.crdt.insertChar(char);
-         this.updateEditor();
-        },
-       (char) => {
-         this.crdt.deleteChar(char);
-         this.updateEditor();
-        });
+    this.peer = new Peer({
+      host: location.hostname,
+      port: location.port || (location.protocol === "https:" ? 443 : 80),
+      path: "/peerjs",
+      config: {
+        iceServers: [
+          { url: "stun:stun1.l.google.com:19302" },
+          {
+            url: "turn:numb.viagenie.ca",
+            credential: "conclave-rulez",
+            username: "sunnysurvies@gmail.com"
+          }
+        ]
+      },
+      debug: 1
+    });
+    // this.broadcastService = boradcastService;
+    // this.broadcastService.registerController(
+    //   this.siteId,
+    //   char => {
+    //     this.crdt.insertChar(char);
+    //     this.updateEditor();
+    //   },
+    //   char => {
+    //     this.crdt.deleteChar(char);
+    //     this.updateEditor();
+    //   }
+    // );
+
+    this.broadcast = new BroadCast(this, this.peer);
+    this.broadcast.bindServerEvents(targetPeerId);
   }
 
   // create new editor
@@ -35,7 +54,7 @@ class Controller {
   localInsert(text, from) {
     let pos = from;
     for (let i = 0; i < text.length; i++) {
-      const char = this.crdt.generateChar(pos, text[i])
+      const char = this.crdt.generateChar(pos, text[i]);
       this.crdt.insertChar(char);
       this.broadcastService.broadcast("insert", char, this.siteId);
       pos++;
@@ -47,7 +66,7 @@ class Controller {
    *  delete from editor
    * @param {*} text string
    * @param {*} from
-   * @param {*} to 
+   * @param {*} to
    */
   localDelete(text, from, to) {
     let pos = from;
@@ -67,64 +86,16 @@ class Controller {
     this.editor.canvas.codemirror.setCursor(cursor);
   }
 
+  updatePageURL(id, win = window) {
+    const newURL = this.host + "?" + id;
+    win.history.pushState({}, "", newURL);
+  }
+
+  handleRemoteOperation(dataObj) {}
+
+  exportOriginalData(dataObj) {}
+
   broadcast(char) {}
-
-  addToNetwork(peerId, siteId, doc=document)
-  {
-    if (!this.network.find(obj => obj.siteId === siteId)) {
-      this.network.push({ peerId, siteId });
-      if (siteId !== this.siteId) {
-        this.addToListOfPeers(siteId, peerId, doc);
-      }
-
-      this.broadcast.addToNetwork(peerId, siteId);
-    }
-  }
-
-
-  addToListOfPeers(siteId, peerId, doc=document) {
-    const listItem = doc.createElement('li');
-    const node = doc.createElement('span');
-
-// // purely for mock testing purposes
-    //   let parser;
-    //   if (typeof DOMParser === 'object') {
-    //     parser = new DOMParser();
-    //   } else {
-    //     parser = {
-    //       parseFromString: function() {
-    //         return { firstChild: doc.createElement('div') }
-    //       }
-    //     }
-    //   }
-
-    const parser = new DOMParser();
-
-    const color = generateItemFromHash(siteId, CSS_COLORS);
-    const name = generateItemFromHash(siteId, ANIMALS);
-
-    // COMMENTED OUT: Video editor does not work
-    // const phone = parser.parseFromString(Feather.icons.phone.toSvg({ class: 'phone' }), "image/svg+xml");
-    // const phoneIn = parser.parseFromString(Feather.icons['phone-incoming'].toSvg({ class: 'phone-in' }), "image/svg+xml");
-    // const phoneOut = parser.parseFromString(Feather.icons['phone-outgoing'].toSvg({ class: 'phone-out' }), "image/svg+xml");
-    // const phoneCall = parser.parseFromString(Feather.icons['phone-call'].toSvg({ class: 'phone-call' }), "image/svg+xml");
-
-    node.textContent = name;
-    node.style.backgroundColor = color;
-    node.classList.add('peer');
-
-    // this.attachVideoEvent(peerId, listItem);
-
-    listItem.id = peerId;
-    listItem.appendChild(node);
-    // listItem.appendChild(phone.firstChild);
-    // listItem.appendChild(phoneIn.firstChild);
-    // listItem.appendChild(phoneOut.firstChild);
-    // listItem.appendChild(phoneCall.firstChild);
-    doc.querySelector('#peerId').appendChild(listItem);
-  }
 }
-
-
 
 export default Controller;

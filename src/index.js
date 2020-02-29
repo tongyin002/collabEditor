@@ -16,6 +16,4 @@ let controller1 = new Controller(
   "editor2",
   broadcastService
 );
-// debug
-let editor = controller0.editor;
-let cm = editor.canvas.codemirror;
+
