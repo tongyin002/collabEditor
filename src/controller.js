@@ -7,6 +7,7 @@ import { BroadCastService } from "./broadcast_service";
 class Controller {
   constructor(host, targetPeerId, elementId, boradcastService) {
     // TODO(shirleyxt): switch back siteId once finished testing.
+    this.host = host;
     this.siteId = elementId;
     this.editor = new Editor(this, elementId);
     this.crdt = new CRDT();
@@ -89,6 +90,12 @@ class Controller {
   updatePageURL(id, win = window) {
     const newURL = this.host + "?" + id;
     win.history.pushState({}, "", newURL);
+  }
+
+  updateSharedLink(id, doc = document) {
+    let link = this.host + "?" + id;
+    let ptag = doc.querySelector("#link");
+    ptag.textContent = link;
   }
 
   handleRemoteOperation(dataObj) {}
