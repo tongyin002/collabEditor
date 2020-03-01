@@ -7,7 +7,7 @@ import { BroadCastService } from "./broadcast_service";
 class Controller {
   constructor(host, targetPeerId, elementId, boradcastService) {
     // TODO(shirleyxt): switch back siteId once finished testing.
-    this.siteId = elementId;
+    this.siteId = this.generateUUID();
     this.editor = new Editor(this, elementId);
     this.crdt = new CRDT();
     this.peer = new Peer({
@@ -56,7 +56,7 @@ class Controller {
     for (let i = 0; i < text.length; i++) {
       const char = this.crdt.generateChar(pos, text[i]);
       this.crdt.insertChar(char);
-      this.broadcastService.broadcast("insert", char, this.siteId);
+      this.broadcastInsertion(char);
       pos++;
     }
     this.updateEditor();
@@ -75,7 +75,7 @@ class Controller {
       console.log(`intended position: ${pos}`);
       const char = this.crdt.lookupCharByPosition(pos);
       this.crdt.deleteChar(char);
-      this.broadcastService.broadcast("delete", char, this.siteId);
+      this.broadcastDeletion(char);
     }
     this.updateEditor();
   }
@@ -91,11 +91,57 @@ class Controller {
     win.history.pushState({}, "", newURL);
   }
 
-  handleRemoteOperation(dataObj) {}
+  handleRemoteOperation(operation) {
+    if (operation.type === 'insert') {
+      this.crdt.insertChar(operation.char);
+    } else if (operation.type === 'delete') {
+      this.crdt.deleteChar(operation.char);
+    }
 
-  exportOriginalData(dataObj) {}
+    this.vector.update(operation.version);
+  }
 
-  broadcast(char) {}
+  populateCRDT(initialStruct) {
+    const content = initialStruct.map(char=> {
+      return new Char(char.id, char.value, char.siteId, char.siteCounter);
+    });
+    this.crdt.chars = content;
+    this.updateEditor();
+  }
+
+  broadcastInsertion(char) {
+    const operation = {
+      type: 'insert',
+      char: char
+    };
+
+    this.broadcast.send(operation);
+  }
+
+  broadcastDeletion(char) {
+    const operation = {
+      type: 'delete',
+      char: char
+    };
+
+    this.broadcast.send(operation);
+  }
+
+  generateUUID() {
+    var d = new Date().getTime();//Timestamp
+    var d2 = (performance && performance.now && (performance.now() * 1000)) || 0;//Time in microseconds since page-load or 0 if unsupported
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+        var r = Math.random() * 16;//random number between 0 and 16
+        if (d > 0) {//Use timestamp until depleted
+            r = (d + r) % 16 | 0;
+            d = Math.floor(d / 16);
+        } else {//Use microseconds since page-load if supported
+            r = (d2 + r) % 16 | 0;
+            d2 = Math.floor(d2 / 16);
+        }
+        return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+    });
+  }
 }
 
 export default Controller;
