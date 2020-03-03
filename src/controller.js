@@ -104,8 +104,9 @@ class Controller {
     } else if (operation.type === "delete") {
       this.crdt.deleteChar(operation.char);
     }
-
-    this.vector.update(operation.version);
+  // TODO: handle version.
+  // this.vector.update(operation.version);
+    this.updateEditor();
   }
 
   populateCRDT(initialStruct) {
