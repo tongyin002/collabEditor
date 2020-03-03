@@ -18089,11 +18089,81 @@ class BroadCast {
     this.connections = [];
     this.peer = peer;
     this.controller = controller;
-    this.outConns = []; // connect to others
-    this.inConns = []; // others come in
+    this.directConns = []; // connect to others
+    this.allConns = []; // others come in
     this.outgoingBuffer = [];
     this.MAX_BUFFER_SIZE = 40;
     this.currentStream = null;
+  }
+
+  bindServerEvents(targetPeerId) {
+    this.onOpen(targetPeerId);
+  }
+
+  onOpen(targetPeerId) {
+    this.peer.on("open", id => {
+      this.onConnection();
+
+      if (id !== "0") {
+        this.requestConnection(targetPeerId, id, this.controller.siteId);
+      }
+    });
+  }
+
+  onConnection() {
+    this.peer.on("connection", connection => {
+      this.onData(connection);
+      this.onConnClose(connection);
+    });
+  }
+
+  // receive message from all connections (broadcast)
+  onData(connection) {
+    connection.on("data", data => {
+      const dataObj = JSON.parse(data);
+
+      switch (dataObj.type) {
+        case "connRequest":
+          this.acceptConnRequest(dataObj.peerId, dataObj.siteId);
+          break;
+        case "syncResponse":
+          //this.processOutgoingBuffer(dataObj.peerId);
+          this.controller.populateCRDT(dataObj);
+          break;
+        // case "syncCompleted":
+        //   this.processOutgoingBuffer(dataObj.peerId);
+        //   break;
+        // case "add to network":
+        //   this.controller.addToNetwork(dataObj.newPeer, dataObj.newSite);
+        //   break;
+        // case "remove from network":
+        //   this.controller.removeFromNetwork(dataObj.oldPeer);
+        //   break;
+        default:
+          this.controller.handleRemoteOperation(dataObj);
+      }
+    });
+  }
+
+  // removeFromConnections(peer) {
+  //   //this.allConns = this.allConns.filter(conn => conn.peer !== peer);
+  //   this.directConns = this.directConns.filter(conn => conn.peer !== peer);
+  //   //this.removeFromNetwork(peer);
+  // }
+
+  onConnClose(connection) {
+    connection.on("close", () => {
+      this.directConns = this.directConns.filter(conn => conn.peer !== peer);
+      if (connection.peer == this.controller.urlId) {
+        const id = this.randomId();
+        if (id) {
+          this.controller.updatePageURL(id);
+        }
+      }
+      // if (!this.hasReachedMax()) {
+      //   this.controller.findNewTarget();
+      // }
+    });
   }
 
   // request connection to another peer
@@ -18101,7 +18171,7 @@ class BroadCast {
   // target: get from url: {key: 'lwjd5qra8257b9'}
   requestConnection(target, peerId, siteId) {
     const conn = this.peer.connect(target);
-    this.addToOutConns(conn);
+    this.addTodirectConns(conn);
     conn.on("open", () => {
       conn.send(
         JSON.stringify({
@@ -18116,16 +18186,15 @@ class BroadCast {
   // listen connections from others
   acceptConnRequest(peerId, siteId) {
     const connBack = this.peer.connect(peerId);
-    this.addToOutConns(connBack);
-    this.controller.addToNetwork(peerId, siteId);
+    this.addTodirectConns(connBack);
 
     const initialData = JSON.stringify({
       type: "syncResponse",
       siteId: this.controller.siteId,
       peerId: this.peer.id,
-      initialStruct: this.controller.crdt.struct,
-      initialVersions: this.controller.vector.versions,
-      network: this.controller.network
+      initialStruct: this.controller.crdt.chars,
+      //initialVersions: this.controller.vector.versions,
+      //network: this.controller.network
     });
 
     if (connBack.open) {
@@ -18140,81 +18209,55 @@ class BroadCast {
   // send message to all connections (broadcast)
   send(operation) {
     const operationJSON = JSON.stringify(operation);
-    if (operation.type === "insert" || operation.type === "delete") {
-      this.addToOutgoingBuffer(operationJSON);
-    }
-    this.outConns.forEach(conn => conn.send(operationJSON));
+    // if (operation.type === "insert" || operation.type === "delete") {
+    //   this.addToOutgoingBuffer(operationJSON);
+
+    // }
+    this.directConns.forEach(conn => conn.send(operationJSON));
   }
 
-  // receive message from all connections (broadcast)
-  onData(connection) {
-    connection.on("data", data => {
-      const dataObj = JSON.parse(data);
-
-      switch (dataObj.type) {
-        case "connRequest":
-          this.evaluateRequest(dataObj.peerId, dataObj.siteId);
-          break;
-        case "syncResponse":
-          this.processOutgoingBuffer(dataObj.peerId);
-          this.controller.handleSync(dataObj);
-          break;
-        case "syncCompleted":
-          this.processOutgoingBuffer(dataObj.peerId);
-          break;
-        case "add to network":
-          this.controller.addToNetwork(dataObj.newPeer, dataObj.newSite);
-          break;
-        case "remove from network":
-          this.controller.removeFromNetwork(dataObj.oldPeer);
-          break;
-        default:
-          this.controller.handleRemoteOperation(dataObj);
-      }
-    });
-  }
   // connect to others
-  addToOutConns(connection) {
+  addTodirectConns(connection) {
     if (!!connection && !this.isAlreadyConnectedOut(connection)) {
-      this.outConns.push(connection);
+      this.directConns.push(connection);
     }
   }
 
   isAlreadyConnectedOut(connection) {
     if (connection.peer) {
-      return !!this.outConns.find(conn => conn.peer === connection.peer);
+      return !!this.directConns.find(conn => conn.peer === connection.peer);
     } else {
-      return !!this.outConns.find(conn => conn.peer.id === connection);
+      return !!this.directConns.find(conn => conn.peer.id === connection);
     }
   }
 
-  randomId() {
-    const possConns = this.inConns.filter(conn => {
-      return this.peer.id !== conn.peer;
-    });
-    const randomIdx = Math.floor(Math.random() * possConns.length);
-    if (possConns[randomIdx]) {
-      return possConns[randomIdx].peer;
-    } else {
-      return false;
-    }
-  }
+  // randomId() {
+  //   const possConns = this.allConns.filter(conn => {
+  //     return this.peer.id !== conn.peer;
+  //   });
+  //   const randomIdx = Math.floor(Math.random() * possConns.length);
+  //   if (possConns[randomIdx]) {
+  //     return possConns[randomIdx].peer;
+  //   } else {
+  //     return false;
+  //   }
+  // }
 
-  addToNetwork(peerId, siteId) {
-    this.send({
-      type: "add to network",
-      newPeer: peerId,
-      newSite: siteId
-    });
-  }
+  // addToNetwork(peerId, siteId) {
+  //   this.send({
+  //     type: "add to network",
+  //     newPeer: peerId,
+  //     newSite: siteId
+  //   });
+  // }
 
-  addToOutgoingBuffer(operation) {
-    if (this.outgoingBuffer.length === this.MAX_BUFFER_SIZE) {
-      this.outgoingBuffer.shift();
-    }
+  // addToOutgoingBuffer(operation) {
+  //   if (this.outgoingBuffer.length === this.MAX_BUFFER_SIZE) {
+  //     this.outgoingBuffer.shift();
+  //   }
 
-    this.outgoingBuffer.push(operation);
-  }
+  //   this.outgoingBuffer.push(operation);
+  // }
 }
 
 /* harmony default export */ var broadcast = (BroadCast);
@@ -18223,7 +18266,7 @@ class BroadCast {
 /**
  * 
  */
-class Char {
+class char_Char {
     /**
      * 
      * @param {Array<number>} id Unique id, used in CRDT.
@@ -18275,11 +18318,11 @@ class crdt_CRDT {
      * @param {number} base maximum number of nodes in the first level
      * @memberof crdt
      */
-    constructor(boundry = 10, base = 32) {
+    constructor(boundry = 10, base = 32, siteID) {
         this.boundry = boundry;
         this.base = base;
         this.siteCounter = 0;
-        this.siteID = this.generateUUID();
+        this.siteID = siteID;
         this.strategyMap = new Map();
         /**
          * index represents the postion of the char.
@@ -18340,7 +18383,7 @@ class crdt_CRDT {
         const right = this.lookupCharByPosition(pos);
         const newID = this.generateID(left == null ? [] : left.id,
             right == null ? [] : right.id);
-        return new Char(newID, val, this.siteID, this.siteCounter);
+        return new char_Char(newID, val, this.siteID, this.siteCounter);
     }
 
     /**
@@ -18451,22 +18494,6 @@ class crdt_CRDT {
         return idCopy;
     }
 
-    generateUUID() {
-        var d = new Date().getTime();//Timestamp
-        var d2 = (performance && performance.now && (performance.now() * 1000)) || 0;//Time in microseconds since page-load or 0 if unsupported
-        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
-            var r = Math.random() * 16;//random number between 0 and 16
-            if (d > 0) {//Use timestamp until depleted
-                r = (d + r) % 16 | 0;
-                d = Math.floor(d / 16);
-            } else {//Use microseconds since page-load if supported
-                r = (d2 + r) % 16 | 0;
-                d2 = Math.floor(d2 / 16);
-            }
-            return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
-        });
-    }
-
     logChars() {
         console.log(this.chars);
     }
@@ -18536,7 +18563,7 @@ class BroadCastService {
 class controller_Controller {
   constructor(host, targetPeerId, elementId, boradcastService) {
     // TODO(shirleyxt): switch back siteId once finished testing.
-    this.siteId = elementId;
+    this.siteId = this.generateUUID();
     this.editor = new editor(this, elementId);
     this.crdt = new crdt();
     this.peer = new peerjs_min_default.a({
@@ -18555,19 +18582,21 @@ class controller_Controller {
       },
       debug: 1
     });
+    // this.broadcastService = boradcastService;
+    // this.broadcastService.registerController(
+    //   this.siteId,
+    //   char => {
+    //     this.crdt.insertChar(char);
+    //     this.updateEditor();
+    //   },
+    //   char => {
+    //     this.crdt.deleteChar(char);
+    //     this.updateEditor();
+    //   }
+    // );
+
     this.broadcast = new broadcast(this, this.peer);
-    this.broadcastService = boradcastService;
-    this.broadcastService.registerController(
-      this.siteId,
-      char => {
-        this.crdt.insertChar(char);
-        this.updateEditor();
-      },
-      char => {
-        this.crdt.deleteChar(char);
-        this.updateEditor();
-      }
-    );
+    this.broadcast.bindServerEvents(targetPeerId);
   }
 
   // create new editor
@@ -18583,7 +18612,7 @@ class controller_Controller {
     for (let i = 0; i < text.length; i++) {
       const char = this.crdt.generateChar(pos, text[i]);
       this.crdt.insertChar(char);
-      this.broadcastService.broadcast("insert", char, this.siteId);
+      this.broadcastInsertion(char);
       pos++;
     }
     this.updateEditor();
@@ -18602,7 +18631,7 @@ class controller_Controller {
       console.log(`intended position: ${pos}`);
       const char = this.crdt.lookupCharByPosition(pos);
       this.crdt.deleteChar(char);
-      this.broadcastService.broadcast("delete", char, this.siteId);
+      this.broadcastDeletion(char);
     }
     this.updateEditor();
   }
@@ -18613,59 +18642,61 @@ class controller_Controller {
     this.editor.canvas.codemirror.setCursor(cursor);
   }
 
-  broadcast(char) {}
-
-  addToNetwork(peerId, siteId, doc = document) {
-    if (!this.network.find(obj => obj.siteId === siteId)) {
-      this.network.push({ peerId, siteId });
-      if (siteId !== this.siteId) {
-        this.addToListOfPeers(siteId, peerId, doc);
-      }
-
-      this.broadcast.addToNetwork(peerId, siteId);
-    }
+  updatePageURL(id, win = window) {
+    const newURL = this.host + "?" + id;
+    win.history.pushState({}, "", newURL);
   }
 
-  addToListOfPeers(siteId, peerId, doc = document) {
-    const listItem = doc.createElement("li");
-    const node = doc.createElement("span");
+  handleRemoteOperation(operation) {
+    if (operation.type === 'insert') {
+      this.crdt.insertChar(operation.char);
+    } else if (operation.type === 'delete') {
+      this.crdt.deleteChar(operation.char);
+    }
 
-    // // purely for mock testing purposes
-    //   let parser;
-    //   if (typeof DOMParser === 'object') {
-    //     parser = new DOMParser();
-    //   } else {
-    //     parser = {
-    //       parseFromString: function() {
-    //         return { firstChild: doc.createElement('div') }
-    //       }
-    //     }
-    //   }
+    this.vector.update(operation.version);
+  }
 
-    const parser = new DOMParser();
+  populateCRDT(initialStruct) {
+    const content = initialStruct.map(char=> {
+      return new Char(char.id, char.value, char.siteId, char.siteCounter);
+    });
+    this.crdt.chars = content;
+    this.updateEditor();
+  }
 
-    const color = generateItemFromHash(siteId, CSS_COLORS);
-    const name = generateItemFromHash(siteId, ANIMALS);
+  broadcastInsertion(char) {
+    const operation = {
+      type: 'insert',
+      char: char
+    };
 
-    // COMMENTED OUT: Video editor does not work
-    // const phone = parser.parseFromString(Feather.icons.phone.toSvg({ class: 'phone' }), "image/svg+xml");
-    // const phoneIn = parser.parseFromString(Feather.icons['phone-incoming'].toSvg({ class: 'phone-in' }), "image/svg+xml");
-    // const phoneOut = parser.parseFromString(Feather.icons['phone-outgoing'].toSvg({ class: 'phone-out' }), "image/svg+xml");
-    // const phoneCall = parser.parseFromString(Feather.icons['phone-call'].toSvg({ class: 'phone-call' }), "image/svg+xml");
+    this.broadcast.send(operation);
+  }
 
-    node.textContent = name;
-    node.style.backgroundColor = color;
-    node.classList.add("peer");
+  broadcastDeletion(char) {
+    const operation = {
+      type: 'delete',
+      char: char
+    };
 
-    // this.attachVideoEvent(peerId, listItem);
+    this.broadcast.send(operation);
+  }
 
-    listItem.id = peerId;
-    listItem.appendChild(node);
-    // listItem.appendChild(phone.firstChild);
-    // listItem.appendChild(phoneIn.firstChild);
-    // listItem.appendChild(phoneOut.firstChild);
-    // listItem.appendChild(phoneCall.firstChild);
-    doc.querySelector("#peerId").appendChild(listItem);
+  generateUUID() {
+    var d = new Date().getTime();//Timestamp
+    var d2 = (performance && performance.now && (performance.now() * 1000)) || 0;//Time in microseconds since page-load or 0 if unsupported
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+        var r = Math.random() * 16;//random number between 0 and 16
+        if (d > 0) {//Use timestamp until depleted
+            r = (d + r) % 16 | 0;
+            d = Math.floor(d / 16);
+        } else {//Use microseconds since page-load if supported
+            r = (d2 + r) % 16 | 0;
+            d2 = Math.floor(d2 / 16);
+        }
+        return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+    });
   }
 }
 
