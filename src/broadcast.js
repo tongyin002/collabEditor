@@ -16,6 +16,7 @@ class BroadCast {
 
   onOpen(targetPeerId) {
     this.peer.on("open", id => {
+      this.controller.updateSharedLink(id);
       this.onConnection();
 
       if (id !== "0") {
@@ -106,7 +107,7 @@ class BroadCast {
       type: "syncResponse",
       siteId: this.controller.siteId,
       peerId: this.peer.id,
-      initialStruct: this.controller.crdt.chars,
+      initialStruct: this.controller.crdt.chars
       //initialVersions: this.controller.vector.versions,
       //network: this.controller.network
     });

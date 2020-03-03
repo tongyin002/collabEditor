@@ -5,8 +5,9 @@ import Peer from "peerjs";
 import { BroadCastService } from "./broadcast_service";
 
 class Controller {
-  constructor(host, targetPeerId, elementId, boradcastService) {
+  constructor(host, targetPeerId, elementId) {
     // TODO(shirleyxt): switch back siteId once finished testing.
+    this.host = host;
     this.siteId = this.generateUUID();
     this.editor = new Editor(this, elementId);
     this.crdt = new CRDT();
@@ -91,10 +92,16 @@ class Controller {
     win.history.pushState({}, "", newURL);
   }
 
+  updateSharedLink(id, doc = document) {
+    let link = this.host + "?" + id;
+    let ptag = doc.querySelector("#link");
+    ptag.textContent = link;
+  }
+
   handleRemoteOperation(operation) {
-    if (operation.type === 'insert') {
+    if (operation.type === "insert") {
       this.crdt.insertChar(operation.char);
-    } else if (operation.type === 'delete') {
+    } else if (operation.type === "delete") {
       this.crdt.deleteChar(operation.char);
     }
 
@@ -102,7 +109,7 @@ class Controller {
   }
 
   populateCRDT(initialStruct) {
-    const content = initialStruct.map(char=> {
+    const content = initialStruct.map(char => {
       return new Char(char.id, char.value, char.siteId, char.siteCounter);
     });
     this.crdt.chars = content;
@@ -111,7 +118,7 @@ class Controller {
 
   broadcastInsertion(char) {
     const operation = {
-      type: 'insert',
+      type: "insert",
       char: char
     };
 
@@ -120,7 +127,7 @@ class Controller {
 
   broadcastDeletion(char) {
     const operation = {
-      type: 'delete',
+      type: "delete",
       char: char
     };
 
@@ -128,18 +135,20 @@ class Controller {
   }
 
   generateUUID() {
-    var d = new Date().getTime();//Timestamp
-    var d2 = (performance && performance.now && (performance.now() * 1000)) || 0;//Time in microseconds since page-load or 0 if unsupported
-    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
-        var r = Math.random() * 16;//random number between 0 and 16
-        if (d > 0) {//Use timestamp until depleted
-            r = (d + r) % 16 | 0;
-            d = Math.floor(d / 16);
-        } else {//Use microseconds since page-load if supported
-            r = (d2 + r) % 16 | 0;
-            d2 = Math.floor(d2 / 16);
-        }
-        return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+    var d = new Date().getTime(); //Timestamp
+    var d2 = (performance && performance.now && performance.now() * 1000) || 0; //Time in microseconds since page-load or 0 if unsupported
+    return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function(c) {
+      var r = Math.random() * 16; //random number between 0 and 16
+      if (d > 0) {
+        //Use timestamp until depleted
+        r = (d + r) % 16 | 0;
+        d = Math.floor(d / 16);
+      } else {
+        //Use microseconds since page-load if supported
+        r = (d2 + r) % 16 | 0;
+        d2 = Math.floor(d2 / 16);
+      }
+      return (c === "x" ? r : (r & 0x3) | 0x8).toString(16);
     });
   }
 }
