@@ -100,20 +100,25 @@ class Controller {
 
   handleRemoteOperation(operation) {
     let cursor = this.editor.canvas.codemirror.getCursor();
-
+    let cursorPos = this.editor.canvas.codemirror.getDoc().indexFromPos(cursor);
+    console.log(cursor);
+    console.log(cursorPos);
     if (operation.type === "insert") {
       let pos = this.crdt.insertChar(operation.char);
-      if (pos <= cursor) {
-        cursor++;
+      if (pos < cursorPos) {
+        cursorPos++;
       }
     } else if (operation.type === "delete") {
       let pos = this.crdt.deleteChar(operation.char);
-      if (pos <= cursor) {
-        cursor--;
+      if (pos < cursorPos) {
+        cursorPos--;
       }
     }
     this.editor.canvas.codemirror.getDoc().setValue(this.crdt.toText());
-    this.editor.canvas.codemirror.setCursor(cursor);    
+    let newCursor = this.editor.canvas.codemirror.getDoc().posFromIndex(cursorPos);
+    this.editor.canvas.codemirror.setCursor(newCursor);    
+    console.log(newCursor);
+    console.log(cursorPos);   
   }
 
   populateCRDT(initialStruct) {
