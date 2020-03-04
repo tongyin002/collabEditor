@@ -29,27 +29,29 @@ class CRDT {
     /**
      * Inserts char passed in
      * @param {Char} char
+     * @returns {Number} position
      * @memberof CRDT
      */
     insertChar(char) {
         let position = this.lookupPositionByID(char);
         this.chars.splice(position, 0, char);
+        return position;
     }
 
     /**
      * Deletes char passed in
      * @param {Char} char
-     * @returns{boolean} true if successfully delted, false otherwise.
+     * @returns{Number} position(-1 if the char cannot be found).
      * @memberof CRDT
      */
     deleteChar(char) {
         let position = this.lookupPositionByID(char);
         console.log(`looked up position: ${position}`);
         if (compare(this.chars[position], char) !== 0) {
-            return false;
+            return -1;
         }
         this.chars.splice(position, 1);
-        return true;
+        return position;
     }
 
     /**

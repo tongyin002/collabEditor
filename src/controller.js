@@ -99,14 +99,21 @@ class Controller {
   }
 
   handleRemoteOperation(operation) {
+    let cursor = this.editor.canvas.codemirror.getCursor();
+
     if (operation.type === "insert") {
-      this.crdt.insertChar(operation.char);
+      let pos = this.crdt.insertChar(operation.char);
+      if (pos <= cursor) {
+        cursor++;
+      }
     } else if (operation.type === "delete") {
-      this.crdt.deleteChar(operation.char);
+      let pos = this.crdt.deleteChar(operation.char);
+      if (pos <= cursor) {
+        cursor--;
+      }
     }
-  // TODO: handle version.
-  // this.vector.update(operation.version);
-    this.updateEditor();
+    this.editor.canvas.codemirror.getDoc().setValue(this.crdt.toText());
+    this.editor.canvas.codemirror.setCursor(cursor);    
   }
 
   populateCRDT(initialStruct) {
