@@ -1,213 +1,166 @@
-import { Char, compare } from './char';
+import { concat, take, takeRight, remove, reduce } from "lodash";
+import {
+  getPosBefore,
+  getPosAfter,
+  createPos,
+  mergeTwoLines,
+  findInsertLoc,
+  findDeleteLoc
+} from "./util";
 
-/**
- * @class CRDT
- */
 class CRDT {
-    /**
-     * Creates an instance of CRDT.
-     * We used LSEQ algorithm. For more details, please refer to:
-     * https://hal.archives-ouvertes.fr/hal-00921633/document
-     * @param {number} boundry the maximum interval between two ids
-     * @param {number} base maximum number of nodes in the first level
-     * @memberof crdt
-     */
-    constructor(boundry = 10, base = 32) {
-        this.boundry = boundry;
-        this.base = base;
-        this.siteCounter = 0;
-        this.siteID = this.generateUUID();
-        this.strategyMap = new Map();
-        /**
-         * index represents the postion of the char.
-         * @type{Array<Char>}
-         */
+  constructor(controller) {
+    this.controller = controller;
+    this.data = [[]];
+    this.cache = [];
+  }
 
-        this.chars = [];
+  /**
+   *
+   * @param {string} c
+   * @param {{line: , ch: }} from
+   */
+  handleLocalInsert(c, from) {
+    this.controller.vector.updateCounter();
+
+    let char = this.createNewChar(c, from);
+    this.insert(char, from);
+
+    //broadcast this insertion
+    this.controller.broadcastInsert(char);
+  }
+
+  /**
+   *
+   * @param {{line: , ch: }} from
+   * @param {{line: , ch: }} to
+   */
+  handleLocalDelete(from, to) {
+    let deletedChars = [];
+
+    if (from.line === to.line) {
+      // only chars on a single line are deleted
+      deletedChars = this.data[from.line].splice(from.ch, to.ch - from.ch);
+    } else {
+      // several lines are deleted
+      deletedChars = this.data[from.line].splice(from.ch);
+      for (let line = from.line + 1; line < to.line; line++) {
+        deletedChars = concat(deletedChars, this.data[line].splice(0));
+      }
+      if (this.data[to.line]) {
+        deletedChars = concat(
+          deletedChars,
+          this.data[to.line].splice(0, to.ch)
+        );
+      }
     }
 
-    /**
-     * Inserts char passed in
-     * @param {Char} char
-     * @memberof CRDT
-     */
-    insertChar(char) {
-        let position = this.lookupPositionByID(char);
-        this.chars.splice(position, 0, char);
+    let lineDeleted = false;
+    deletedChars.forEach(char => {
+      if (char.val === "\n") lineDeleted = true;
+      this.controller.vector.updateCounter();
+      this.controller.broadcastDelete(
+        char,
+        this.controller.vector.localVersion
+      );
+    });
+
+    remove(this.data, line => {
+      return line.length === 0;
+    });
+    if (this.data.length === 0) this.data.push([]);
+
+    // merge two lines
+    if (lineDeleted && this.data[from.line + 1]) mergeTwoLines(this.data, from);
+  }
+
+  createNewChar(c, loc) {
+    let posBefore = getPosBefore(this.data, loc);
+    let posAfter = getPosAfter(this.data, loc);
+    let posCurr = createPos(
+      posBefore,
+      posAfter,
+      this.controller.id,
+      this.cache
+    );
+
+    return { val: c, counter: 0, id: this.controller.id, pos: posCurr };
+  }
+
+  /**
+   *
+   * @param {*} char
+   * @param {*} from
+   */
+  insert(char, loc) {
+    if (this.data.length === loc.line) this.data.push([]);
+
+    let curLine = this.data[loc.line];
+    let left = take(curLine, loc.ch);
+    let right = takeRight(curLine, curLine.length - loc.ch);
+
+    if (char.val !== "\n") {
+      this.data[loc.line] = concat(left, char, right);
+    } else {
+      left = concat(left, char);
+      if (right.length === 0) {
+        // no more lines
+        this.data[loc.line] = left;
+      } else {
+        this.data.splice(loc.line, 1, left, right);
+      }
     }
+  }
 
-    /**
-     * Deletes char passed in
-     * @param {Char} char
-     * @returns{boolean} true if successfully delted, false otherwise.
-     * @memberof CRDT
-     */
-    deleteChar(char) {
-        let position = this.lookupPositionByID(char);
-        console.log(`looked up position: ${position}`);
-        if (compare(this.chars[position], char) !== 0) {
-            return false;
-        }
-        this.chars.splice(position, 1);
-        return true;
-    }
+  getText() {
+    return reduce(
+      this.data,
+      (text1, line) => {
+        return (
+          text1 +
+          reduce(
+            line,
+            (text2, char) => {
+              return text2 + char.val;
+            },
+            ""
+          )
+        );
+      },
+      ""
+    );
+  }
 
-    /**
-     * Looks up according to the pos from Editor and returns the Char from chars
-     * If pos not found, return null
-     * @param {number} pos
-     * @returns {Char} 
-     * @memberof CRDT
-     */
-    lookupCharByPosition(pos) {
-        return pos >= this.chars.length || pos < 0 ? null : this.chars[pos];
-    }
+  numOfChars() {
+    return reduce(
+      this.data,
+      (num, line) => {
+        return num + line.length;
+      },
+      0
+    );
+  }
 
-    /**
-     * Given the position to insert the char, returns the value of the char.
-     * @param {number} pos the position where the new character will be inserted, 
-     *   the character at current positon and after will be shifted to the right
-     * @param {string} val
-     * @returns {Char}
-     * @memberof CRDT
-     */
-    generateChar(pos, val) {
-        this.siteCounter++;
-        const left = this.lookupCharByPosition(pos - 1);
-        const right = this.lookupCharByPosition(pos);
-        const newID = this.generateID(left == null ? [] : left.id,
-            right == null ? [] : right.id);
-        return new Char(newID, val, this.siteID, this.siteCounter);
-    }
+  handleRemoteInsert(char) {
+    let loc = findInsertLoc(char, this.data);
+    this.insert(char, loc);
+    this.controller.insertIntoEditor(char, loc);
+  }
 
-    /**
-     *
-     * @returns {string} the text of the full document.
-     * @memberof CRDT
-     */
-    toText() {
-        let text = "";
-        for (let i = 0; i < this.chars.length; i++) {
-            text += this.chars[i].value;
-        }
-        return text;
-    }
+  handleRemoteDelete(char) {
+    let loc = findDeleteLoc(char, this.data);
+    if (!loc) return;
+    this.data[loc.line].splice(loc.ch, 1);
+    if (char.value === "\n" && this.data[loc.line + 1])
+      mergeTwoLines(this.data, loc.line);
 
+    remove(this.data, line => {
+      return line.length === 0;
+    });
+    if (this.data.length === 0) this.data.push([]);
 
-
-
-    /** Private functions below */
-    /**
-     *
-     * 
-     * @param {Char} char
-     * @returns {number} position of char or position before which char should be inserted
-     * @memberof CRDT
-     */
-    lookupPositionByID(char) {
-        if (this.chars.length === 0) {
-            return 0;
-        }
-        let left = 0, right = this.chars.length - 1;
-        while (left + 1 < right) {
-            let mid = Math.floor((left + right) / 2);
-            if (compare(char, this.chars[mid]) > 0) {
-                left = mid;
-            } else {
-                right = mid;
-            }
-        }
-        if (compare(char, this.chars[left]) <= 0) {
-            return left;
-        }
-
-        if (compare(char, this.chars[right]) > 0) {
-            return right+1;
-        }
-        return right;
-    }
-
-    /**
-     *
-     *
-     * @param {Array<number>} start
-     * @param {Array<number>} end
-     * @returns{Arrary<number>} returns a new id that is between start and end.
-     * @memberof crdt
-     * @private
-     */
-    generateID(start, end) {
-        let depth = 0, interval = 0;
-        while (interval < 1) {
-            interval = this.prefix(end, depth, false)[depth] - this.prefix(start, depth, true)[depth] - 1;
-            depth++;
-        }
-        depth--;
-        let step = Math.min(this.boundry, interval) - 1;
-        if (this.strategyMap.get(depth) == null) {
-            this.strategyMap.set(depth, Math.floor(Math.random() * 2));
-        }
-        let id = [];
-        if (this.strategyMap.get(depth) > 0) {
-            let addVal = Math.floor(Math.random() * step) + 1;
-            id = this.prefix(start, depth, true);
-            id[depth] += addVal;
-        } else {
-            let minVal = Math.floor(Math.random() * step) + 1;
-            id = this.prefix(end, depth, false);
-            id[depth] -= minVal;
-        }
-        return id;
-    }
-
-    /**
-     * Generate prefix
-     * @param {Array<number>} id 
-     * @param {number} depth 
-     * @param {bool} isStart 
-     * @returns {Array<number>} new id
-     * @private
-     */
-    prefix(id, depth, isStart) {
-        let idCopy = [];
-        let currBase = this.base;
-        for (let i = 0; i <= depth; i++) {
-            if (id.length-1 === i && i !== depth && !isStart) {
-                idCopy.push(id[i]-1);
-            } else if (id.length > i) {
-                idCopy.push(id[i]);
-            }
-            else if (isStart) {
-                idCopy.push(0);
-            }
-            else {
-                idCopy.push(currBase);
-            }
-            currBase *= 2;
-        }
-        return idCopy;
-    }
-
-    generateUUID() {
-        var d = new Date().getTime();//Timestamp
-        var d2 = (performance && performance.now && (performance.now() * 1000)) || 0;//Time in microseconds since page-load or 0 if unsupported
-        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
-            var r = Math.random() * 16;//random number between 0 and 16
-            if (d > 0) {//Use timestamp until depleted
-                r = (d + r) % 16 | 0;
-                d = Math.floor(d / 16);
-            } else {//Use microseconds since page-load if supported
-                r = (d2 + r) % 16 | 0;
-                d2 = Math.floor(d2 / 16);
-            }
-            return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
-        });
-    }
-
-    logChars() {
-        console.log(this.chars);
-    }
-
+    this.controller.deleteFromEditor(char, loc);
+  }
 }
 
 export default CRDT;

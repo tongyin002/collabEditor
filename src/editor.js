@@ -1,9 +1,11 @@
-import EasyMDE from "easymde";
+import EasyMde from "easymde";
+
+import { getDiff } from "./util";
 
 class Editor {
-  constructor(controller, elementId) {
-    this.canvas = new EasyMDE({
-      element: document.getElementById(elementId),
+  constructor(controller) {
+    this.canvas = new EasyMde({
+      element: document.getElementById("editor"),
       toolbar: false
     });
 
@@ -16,126 +18,126 @@ class Editor {
     });
 
     this.controller = controller;
-    this.readyForChangeEvents();
+    this.onChangeEvents();
   }
 
-  // binding events to current editor
-  readyForChangeEvents() {
+  /**
+   * register change events on the current editor
+   */
+  onChangeEvents() {
     this.canvas.codemirror.on("change", (_, changeObj) => {
       switch (changeObj.origin) {
-        case undefined:
         case "setValue":
-          return;
+        case "Insert Char":
+        case "Delete Char":
+          break;
         case "redo":
         case "undo":
-          this.callRedoUndo(changeObj);
+          this.handleLocalRedoUndo(changeObj);
           break;
         case "+input":
         case "paste":
-          this.callInsert(changeObj);
+          this.handleLocalInsert(changeObj);
           break;
         case "+delete":
-          this.callDelete(changeObj);
-          break;
-        case "setValue":
-          // Used to update value;
-          console.log("setting value");
+        case "cut":
+          this.handleLocalDelete(changeObj);
           break;
         default:
-          throw new Error(
-            "Operation " + changeObj.origin + " is not supported!"
-          );
+          throw new Error(`Operation ${changeObj.origin} is not supported`);
       }
     });
   }
 
-  textTransform(text) {
-    if (text.length === 2 && text[1] === "" && text[2] === "") {
-      // new line char entered
+  /**
+   * when redo undo happens
+   * @param {*} changeObj
+   */
+  handleLocalRedoUndo(changeObj) {
+    let removed = changeObj.removed;
+    if (removed[0].length > 0) {
+      this.handleLocalDelete(changeObj);
+    } else {
+      this.handleLocalInsert(changeObj);
+    }
+  }
+
+  /**
+   * when chars are typed
+   * @param {*} changeObj
+   */
+  handleLocalInsert(changeObj) {
+    if (changeObj.removed[0].length > 0) {
+      this.handleLocalDelete(changeObj); // in case of replace
+    }
+
+    let text = this.transformText(changeObj.text);
+    this.controller.handleLocalInsert(text, changeObj.from);
+  }
+
+  /**
+   * when chars are deleted
+   * @param {*} changeObj
+   */
+  handleLocalDelete(changeObj) {
+    this.controller.handleLocalDelete(changeObj.from, changeObj.to);
+  }
+
+  transformText(textArr) {
+    if (textArr.length === 2 && textArr[0] === "" && textArr[1] === "") {
       return "\n";
     } else {
-      // multiline chars pasted
-      return text.join("\n");
+      return textArr.join("\n");
     }
   }
 
-  callInsert(changeObj) {
-    if (changeObj.removed.length > 0 && changeObj.removed[0].length > 0) {
-      this.callDelete(changeObj); // in case of paste (replaceing some chars in editor)
-    }
-    let text = this.textTransform(changeObj.text);
-    const pos = this.canvas.codemirror.getDoc().indexFromPos(changeObj.from);
-    this.controller.localInsert(text, pos);
+  replaceText(text) {
+    let cursor = this.canvas.codemirror.getCursor();
+    this.canvas.value(text);
+    this.canvas.codemirror.setCursor(cursor);
   }
 
-  callDelete(changeObj) {
-    let text = this.textTransform(changeObj.removed);
-    const from = this.canvas.codemirror.getDoc().indexFromPos(changeObj.from);
-    const to = from + text.length;
-    this.controller.localDelete(text, from, to);
-  }
+  insertText(text, locs) {
+    let oldCursor = this.canvas.codemirror.getCursor();
+    let diff = getDiff(text);
 
-  callRedoUndo(changeObj) {
-    if (changeObj.removed.length > 0) {
-      this.callDelete(changeObj);
-    } else {
-      this.callInsert(changeObj);
-    }
-  }
+    this.canvas.codemirror.replaceRange(
+      text,
+      locs.from,
+      locs.to,
+      "Insert Char"
+    );
 
-  workOnInsertOrder(text, from, to) {
-    let cursorPos = this.canvas.codemirror.getCursor();
-    let diff = this.getPosDiff(text);
-
-    this.canvas.codemirror.replaceRange(text, from, to);
-
-    // update cursor position
-    if (cursorPos.line > to.line) {
-      cursorPos.line += diff.line;
-    } else if (cursorPos.line === to.line && cursorPos.ch > to.ch) {
+    if (oldCursor.line > locs.to.line) {
+      oldCursor.line += diff.line;
+    } else if (oldCursor.line === locs.to.line && oldCursor.ch > locs.to.ch) {
       if (diff.line > 0) {
-        cursorPos.line += diff.line;
-        cursorPos.ch -= to.ch;
+        oldCursor.line += diff.line;
+        oldCursor.ch -= locs.to.ch;
       }
-      cursorPos.ch += diff.ch;
+      oldCursor.ch += diff.ch;
     }
-
-    this.canvas.codemirror.setCursor(cursorPos);
+    this.canvas.codemirror.setCursor(oldCursor);
   }
 
-  getPosDiff(text) {
-    let ret = { line: 0, ch: 0 };
-    for (let i = 0; i < text.length; i++) {
-      if (text[i] === "\n") {
-        ret.line++;
-        ret.ch = 0;
-      } else {
-        ret.ch++;
-      }
-    }
-    return ret;
-  }
+  deleteText(text, locs) {
+    let oldCursor = this.canvas.codemirror.getCursor();
+    let diff = getDiff(text);
 
-  workOnDeleteOrder(text, from, to) {
-    let cursorPos = this.canvas.codemirror.getCursor();
-    let diff = this.getPosDiff(text);
+    this.canvas.codemirror.replaceRange("", locs.from, locs.to, "Delete Char");
 
-    this.canvas.codemirror.replaceRange("", from, to);
-
-    //update cursor position
-    if (cursorPos.line > to.line) {
-      cursorPos.line -= diff.line;
-    } else if (cursorPos.line == to.line && cursorPos.ch > to.ch) {
+    if (oldCursor.line > locs.to.line) {
+      oldCursor.line -= diff.line;
+    } else if (oldCursor.line === locs.to.line && oldCursor.ch > locs.to.ch) {
       if (diff.line > 0) {
-        cursorPos.line -= diff.line;
-        cursorPos.ch += from.ch;
+        oldCursor.line -= diff.line;
+        oldCursor.ch += locs.from.ch;
       }
-      cursorPos.ch -= diff.ch;
+      oldCursor.ch -= diff.ch;
     }
 
-    this.canvas.codemirror.setCursor(cursorPos);
+    this.canvas.codemirror.setCursor(oldCursor);
   }
 }
 
 export default Editor;
-

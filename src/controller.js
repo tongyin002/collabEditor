@@ -1,130 +1,193 @@
-import Editor from "./editor";
-import BroadCast from "./broadcast";
-import CRDT from "./crdt";
+import { v4 as uuidv4 } from "uuid";
 import Peer from "peerjs";
-import { BroadCastService } from "./broadcast_service";
+import { forEach, cloneDeep } from "lodash";
+
+import Editor from "./editor";
+import CRDT from "./crdt";
+import Vector from "./vector";
+import BroadCast from "./broadcast";
 
 class Controller {
-  constructor(host, targetPeerId, elementId, boradcastService) {
-    // TODO(shirleyxt): switch back siteId once finished testing.
-    this.siteId = elementId;
-    this.editor = new Editor(this, elementId);
-    this.broadcast = new BroadCast();
-    this.crdt = new CRDT();
-    this.peer = new Peer();
-    this.broadcastService = boradcastService;
-    this.broadcastService.registerController(this.siteId,
-       (char)=> {
-         this.crdt.insertChar(char);
-         this.updateEditor();
-        },
-       (char) => {
-         this.crdt.deleteChar(char);
-         this.updateEditor();
-        });
+  constructor(targetPeerId, host) {
+    this.targetPeerId = targetPeerId;
+    this.host = host;
+    this.id = uuidv4();
+    this.members = new Map();
+    this.buffer = [];
+
+    this.peer = new Peer({
+      host: location.hostname,
+      port: location.port || (location.protocol === "https:" ? 443 : 80),
+      path: "/peerjs",
+      config: {
+        iceServers: [
+          { url: "stun:stun1.l.google.com:19302" },
+          {
+            url: "turn:numb.viagenie.ca",
+            credential: "conclave-rulez",
+            username: "sunnysurvies@gmail.com"
+          }
+        ]
+      },
+      debug: 1
+    });
+
+    this.editor = new Editor(this);
+    this.vector = new Vector(this.id);
+    this.crdt = new CRDT(this);
+    this.broadcast = new BroadCast(this, this.peer);
+    this.broadcast.onOpen(targetPeerId);
   }
 
-  // create new editor
-  createEditor() {}
-
   /**
-   * insert to editor
-   * @param {*} text string
-   * @param {*} from
+   *
+   * @param {string} text
+   * @param {{line: , ch: }} from
    */
-  localInsert(text, from) {
-    let pos = from;
+  handleLocalInsert(text, from) {
+    let line = from.line;
+    let ch = from.ch;
+
     for (let i = 0; i < text.length; i++) {
-      const char = this.crdt.generateChar(pos, text[i])
-      this.crdt.insertChar(char);
-      this.broadcastService.broadcast("insert", char, this.siteId);
-      pos++;
+      if (text[i - 1] === "\n") {
+        line++;
+        ch = 0;
+      }
+      this.crdt.handleLocalInsert(text[i], { line: line, ch: ch });
+      ch++;
     }
-    this.updateEditor();
   }
 
   /**
-   *  delete from editor
-   * @param {*} text string
-   * @param {*} from
-   * @param {*} to 
+   *
+   * @param {{line: , ch: }} from
+   * @param {{line: , ch: }} to
    */
-  localDelete(text, from, to) {
-    let pos = from;
-    console.log(`from: ${from}, to: ${to}`);
-    for (let i = from; i < to; i++) {
-      console.log(`intended position: ${pos}`);
-      const char = this.crdt.lookupCharByPosition(pos);
-      this.crdt.deleteChar(char);
-      this.broadcastService.broadcast("delete", char, this.siteId);
+  handleLocalDelete(from, to) {
+    this.crdt.handleLocalDelete(from, to);
+  }
+
+  broadcastInsert(char) {
+    this.broadcast.send({
+      type: "Insert",
+      char,
+      version: this.vector.localVersion
+    });
+  }
+
+  broadcastDelete(char, version) {
+    this.broadcast.send({
+      type: "Delete",
+      char,
+      version
+    });
+  }
+
+  // work on remote insert / delete
+  workOnOp(dataObj) {
+    if (this.vector.redundantWork(dataObj.version)) return;
+
+    if (dataObj.type === "Insert") {
+      this.takeThisJob(dataObj);
+    } else {
+      this.buffer.push(dataObj);
     }
-    this.updateEditor();
+
+    this.takeJobsFromBuffer();
+    this.broadcast.send(dataObj);
   }
 
-  updateEditor() {
-    const cursor = this.editor.canvas.codemirror.getCursor();
-    this.editor.canvas.codemirror.getDoc().setValue(this.crdt.toText());
-    this.editor.canvas.codemirror.setCursor(cursor);
+  takeThisJob(dataObj) {
+    let char = cloneDeep(dataObj.char);
+    if (dataObj.type === "Insert") {
+      this.crdt.handleRemoteInsert(char);
+    } else if (dataObj.type === "Delete") {
+      this.crdt.handleRemoteDelete(char);
+    }
+
+    this.vector.updateVersion(dataObj.version);
   }
 
-  broadcast(char) {}
-
-  addToNetwork(peerId, siteId, doc=document)
-  {
-    if (!this.network.find(obj => obj.siteId === siteId)) {
-      this.network.push({ peerId, siteId });
-      if (siteId !== this.siteId) {
-        this.addToListOfPeers(siteId, peerId, doc);
+  takeJobsFromBuffer() {
+    let index = 0;
+    while (index < this.buffer.length) {
+      let job = this.buffer[index];
+      let isApplied = this.vector.redundantWork({
+        id: job.char.id,
+        counter: job.char.counter
+      });
+      if (isApplied) {
+        this.takeThisJob(job);
+        this.buffer.splice(index, 1);
+      } else {
+        index++;
       }
-
-      this.broadcast.addToNetwork(peerId, siteId);
     }
   }
 
+  addMember(peerId, id) {
+    if (!this.members.get(id)) {
+      this.members.set(id, peerId);
+    }
+    this.broadcast.addMember(peerId, id);
+  }
 
-  addToListOfPeers(siteId, peerId, doc=document) {
-    const listItem = doc.createElement('li');
-    const node = doc.createElement('span');
+  updateURL(id) {
+    this.targetPeerId = id;
+    window.history.pushState({}, ""), this.host + "?" + this.targetPeerId;
+  }
 
-// // purely for mock testing purposes
-    //   let parser;
-    //   if (typeof DOMParser === 'object') {
-    //     parser = new DOMParser();
-    //   } else {
-    //     parser = {
-    //       parseFromString: function() {
-    //         return { firstChild: doc.createElement('div') }
-    //       }
-    //     }
-    //   }
+  copyInitialData(dataObj) {
+    if (dataObj.peerId !== this.targetPeerId) {
+      this.targetPeerId = dataObj.peerId;
+      this.updateURL(this.targetPeerId);
+    }
 
-    const parser = new DOMParser();
+    forEach(dataObj.members, (peerId, id) => {
+      this.addMember(peerId, id);
+    });
 
-    const color = generateItemFromHash(siteId, CSS_COLORS);
-    const name = generateItemFromHash(siteId, ANIMALS);
+    if (this.crdt.numOfChars() === 0) {
+      this.crdt.data = cloneDeep(dataObj.crdtData);
+      this.editor.replaceText(this.crdt.getText());
 
-    // COMMENTED OUT: Video editor does not work
-    // const phone = parser.parseFromString(Feather.icons.phone.toSvg({ class: 'phone' }), "image/svg+xml");
-    // const phoneIn = parser.parseFromString(Feather.icons['phone-incoming'].toSvg({ class: 'phone-in' }), "image/svg+xml");
-    // const phoneOut = parser.parseFromString(Feather.icons['phone-outgoing'].toSvg({ class: 'phone-out' }), "image/svg+xml");
-    // const phoneCall = parser.parseFromString(Feather.icons['phone-call'].toSvg({ class: 'phone-call' }), "image/svg+xml");
+      this.vector.versions = cloneDeep(dataObj.versions);
+    }
 
-    node.textContent = name;
-    node.style.backgroundColor = color;
-    node.classList.add('peer');
+    this.broadcast.sendCopyCompleted(dataObj.peerId);
+  }
 
-    // this.attachVideoEvent(peerId, listItem);
+  insertIntoEditor(char, loc) {
+    let locs = {
+      from: cloneDeep(loc),
+      to: cloneDeep(loc)
+    };
 
-    listItem.id = peerId;
-    listItem.appendChild(node);
-    // listItem.appendChild(phone.firstChild);
-    // listItem.appendChild(phoneIn.firstChild);
-    // listItem.appendChild(phoneOut.firstChild);
-    // listItem.appendChild(phoneCall.firstChild);
-    doc.querySelector('#peerId').appendChild(listItem);
+    this.editor.insertText(char.val, locs);
+  }
+
+  deleteFromEditor(char, loc) {
+    let locs;
+    if (char.val === "\n") {
+      locs = {
+        from: cloneDeep(loc),
+        to: {
+          line: loc.line + 1,
+          ch: 0
+        }
+      };
+    } else {
+      locs = {
+        from: cloneDeep(loc),
+        to: {
+          line: loc.line,
+          ch: loc.ch + 1
+        }
+      };
+    }
+
+    this.editor.deleteText(char.val, locs);
   }
 }
-
-
 
 export default Controller;

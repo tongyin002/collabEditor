@@ -1,133 +1,167 @@
+import { filter, random, find } from "lodash";
+import { hasTooManyConns, addToConnArr } from "./util";
+
 class BroadCast {
-  constructor() {
-    this.connections = [];
-    this.peer = null;
-    this.controller = null;
-    this.outConns = []; // connect to others
-    this.inConns = []; // others come in
-    this.outgoingBuffer = [];
-    this.MAX_BUFFER_SIZE = 40;
-    this.currentStream = null;
+  constructor(controller, peer) {
+    this.controller = controller;
+    this.peer = peer;
+    this.connsForSend = [];
+    this.connsForReceive = [];
   }
 
-  // request connection to another peer
-  // peerId: this peer;
-  // target: get from url: {key: 'lwjd5qra8257b9'}
-  requestConnection(target, peerId, siteId) {
-    const conn = this.peer.connect(target);
-    this.addToOutConns(conn);
-    conn.on('open', () => {
-      conn.send(JSON.stringify({
-        type: 'connRequest',
-        peerId: peerId,
-        siteId: siteId,
-      }));
+  onOpen(targetPeerId) {
+    this.peer.on("open", id => {
+      // update shared link
+      let ptag = document.getElementById("link");
+      ptag.textContent = this.controller.host + "?" + id;
+
+      this.onConnect();
+      this.onDisconnect();
+
+      if (targetPeerId === "0") {
+        this.controller.addMember(id, this.controller.id);
+      } else {
+        this.requestConnect(targetPeerId, id);
+      }
     });
   }
 
-  // listen connections from others
-  acceptConnRequest(peerId, siteId) {
-    const connBack = this.peer.connect(peerId);
-    this.addToOutConns(connBack);
-    this.controller.addToNetwork(peerId, siteId);
+  requestConnect(target, peerId) {
+    let conn = this.peer.connect(target);
+    addToConnArr(conn, this.connsForSend);
+    conn.on("open", () => {
+      let dataObj = {
+        type: "Request Connect",
+        data: {
+          peerId,
+          id: this.controller.id
+        }
+      };
 
-    const initialData = JSON.stringify({
-      type: 'syncResponse',
-      siteId: this.controller.siteId,
+      conn.send(JSON.stringify(dataObj));
+    });
+  }
+
+  onConnect() {
+    this.peer.on("connection", connection => {
+      addToConnArr(connection, this.connsForReceive);
+
+      if (this.controller.targetPeerId === "0") {
+        this.controller.updateURL(connection.peer);
+      }
+
+      // on data
+      connection.on("data", data => {
+        let dataObj = JSON.parse(data);
+        switch (dataObj.type) {
+          case "Add Member":
+            this.controller.addMember(dataObj.data.peerId, dataObj.data.id);
+            break;
+          case "Request Connect":
+            if (
+              hasTooManyConns(
+                this.controller.members,
+                this.connsForSend,
+                this.connsForReceive
+              )
+            ) {
+              this.transferConnRequest(dataObj);
+            } else {
+              this.acceptConnRequest(dataObj);
+            }
+            break;
+          case "Pouring All Data":
+            this.controller.copyInitialData(dataObj);
+            break;
+          case "Copy Completed":
+            break;
+          case "Insert":
+          case "Delete":
+            this.controller.workOnOp(dataObj);
+            break;
+          default:
+            break;
+        }
+      });
+    });
+  }
+
+  transferConnRequest(dataObj) {
+    let otherNodes = filter(this.connsForSend, conn => {
+      return conn.peer !== dataObj.data.peerId;
+    });
+    let chosenConn = otherNodes[random(0, otherNodes.length - 1)];
+    chosenConn.send(JSON.stringify(dataOj));
+  }
+
+  acceptConnRequest(dataObj) {
+    let conn = this.peer.connect(dataObj.data.peerId);
+    addToConnArr(conn, this.connsForSend);
+
+    this.controller.addMember(dataObj.data.peerId, dataObj.data.id);
+
+    let newDataObj = {
+      type: "Pouring All Data",
+      members: this.controller.members,
+      crdtData: this.controller.crdt.data,
+      versions: this.controller.vector.versions,
       peerId: this.peer.id,
-      initialStruct: this.controller.crdt.struct,
-      initialVersions: this.controller.vector.versions,
-      network: this.controller.network
-    });
+      id: this.controller.id
+    };
 
-    if (connBack.open) {
-      connBack.send(initialData);
+    if (conn.open) {
+      conn.send(JSON.stringify(newDataObj));
     } else {
-      connBack.on('open', () => {
-        connBack.send(initialData);
+      conn.on("open", () => {
+        conn.send(JSON.stringify(newDataObj));
       });
     }
   }
 
-  // send message to all connections (broadcast)
-  send(operation) {
-    const operationJSON = JSON.stringify(operation);
-    if (operation.type === 'insert' || operation.type === 'delete') {
-      this.addToOutgoingBuffer(operationJSON);
-    }
-    this.outConns.forEach(conn => conn.send(operationJSON));
+  onDisconnect() {
+    this.peer.on("disconnected", () => {
+      this.peer.reconnect();
+    });
   }
 
-  // receive message from all connections (broadcast)
-  onData(connection) {
-    connection.on('data', data => {
-      const dataObj = JSON.parse(data);
-
-      switch(dataObj.type) {
-        case 'connRequest':
-          this.evaluateRequest(dataObj.peerId, dataObj.siteId);
-          break;
-        case 'syncResponse':
-          this.processOutgoingBuffer(dataObj.peerId);
-          this.controller.handleSync(dataObj);
-          break;
-        case 'syncCompleted':
-          this.processOutgoingBuffer(dataObj.peerId);
-          break;
-        case 'add to network':
-          this.controller.addToNetwork(dataObj.newPeer, dataObj.newSite);
-          break;
-        case 'remove from network':
-          this.controller.removeFromNetwork(dataObj.oldPeer);
-          break;
-        default:
-          this.controller.handleRemoteOperation(dataObj);
+  addMember(peerId, id) {
+    let dataObj = {
+      type: "Add Member",
+      data: {
+        peerId,
+        id
       }
-    });
-  }
-// connect to others
-  addToOutConns(connection) {
-    if (!!connection && !this.isAlreadyConnectedOut(connection)) {
-      this.outConns.push(connection);
-    }
+    };
+
+    this.send(dataObj);
   }
 
-  isAlreadyConnectedOut(connection) {
-    if (connection.peer) {
-      return !!this.outConns.find(conn => conn.peer === connection.peer);
+  send(dataObj) {
+    this.connsForSend.forEach(conn => {
+      conn.send(JSON.stringify(dataObj));
+    });
+  }
+
+  sendCopyCompleted(peerId) {
+    let connection = find(this.connsForSend, conn => {
+      return conn.peer === peerId;
+    });
+
+    let dataObj = {
+      type: "Copy Completed",
+      peerId: this.peer.id
+    };
+
+    if (connection) {
+      connection.send(JSON.stringify(dataObj));
     } else {
-      return !!this.outConns.find(conn => conn.peer.id === connection);
+      connection = this.peer.connect(peerId);
+      addToConnArr(connection, this.connsForSend);
+      connection.on("open", () => {
+        connection.send(JSON.stringify(dataObj));
+      });
     }
   }
-
-  randomId() {
-    const possConns = this.inConns.filter(conn => {
-      return this.peer.id !== conn.peer;
-    });
-    const randomIdx = Math.floor(Math.random() * possConns.length);
-    if (possConns[randomIdx]) {
-      return possConns[randomIdx].peer;
-    } else {
-      return false;
-    }
-  }
-
-  addToNetwork(peerId, siteId) {
-    this.send({
-      type: "add to network",
-      newPeer: peerId,
-      newSite: siteId
-    });
-  }
-
-  addToOutgoingBuffer(operation) {
-    if (this.outgoingBuffer.length === this.MAX_BUFFER_SIZE) {
-      this.outgoingBuffer.shift();
-    }
-
-    this.outgoingBuffer.push(operation);
-  }
-
 }
 
 export default BroadCast;
