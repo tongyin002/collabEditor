@@ -17934,6 +17934,7 @@ webpackEmptyContext.id = 27;
 /***/ (function(module, __webpack_exports__, __webpack_require__) {
 
 "use strict";
+// ESM COMPAT FLAG
 __webpack_require__.r(__webpack_exports__);
 
 // EXTERNAL MODULE: ./node_modules/easymde/src/js/easymde.js
@@ -18013,12 +18014,9 @@ class editor_Editor {
 
   callDelete(changeObj) {
     let text = this.textTransform(changeObj.removed);
-    const from = 
-    this.canvas.codemirror.getDoc().indexFromPos(changeObj.from);
+    const from = this.canvas.codemirror.getDoc().indexFromPos(changeObj.from);
     const to = from + text.length;
-    this.controller.localDelete(
-      text, from, to
-    );
+    this.controller.localDelete(text, from, to);
   }
 
   callRedoUndo(changeObj) {
@@ -18092,16 +18090,131 @@ class BroadCast {
     this.connections = [];
     this.peer = null;
     this.controller = null;
+    this.outConns = []; // connect to others
+    this.inConns = []; // others come in
+    this.outgoingBuffer = [];
+    this.MAX_BUFFER_SIZE = 40;
+    this.currentStream = null;
   }
 
   // request connection to another peer
-  requestConnection(targetPeerId) {}
+  // peerId: this peer;
+  // target: get from url: {key: 'lwjd5qra8257b9'}
+  requestConnection(target, peerId, siteId) {
+    const conn = this.peer.connect(target);
+    this.addToOutConns(conn);
+    conn.on('open', () => {
+      conn.send(JSON.stringify({
+        type: 'connRequest',
+        peerId: peerId,
+        siteId: siteId,
+      }));
+    });
+  }
 
   // listen connections from others
-  listenConnections() {}
+  acceptConnRequest(peerId, siteId) {
+    const connBack = this.peer.connect(peerId);
+    this.addToOutConns(connBack);
+    this.controller.addToNetwork(peerId, siteId);
+
+    const initialData = JSON.stringify({
+      type: 'syncResponse',
+      siteId: this.controller.siteId,
+      peerId: this.peer.id,
+      initialStruct: this.controller.crdt.struct,
+      initialVersions: this.controller.vector.versions,
+      network: this.controller.network
+    });
+
+    if (connBack.open) {
+      connBack.send(initialData);
+    } else {
+      connBack.on('open', () => {
+        connBack.send(initialData);
+      });
+    }
+  }
 
   // send message to all connections (broadcast)
-  send(operation) {}
+  send(operation) {
+    const operationJSON = JSON.stringify(operation);
+    if (operation.type === 'insert' || operation.type === 'delete') {
+      this.addToOutgoingBuffer(operationJSON);
+    }
+    this.outConns.forEach(conn => conn.send(operationJSON));
+  }
+
+  // receive message from all connections (broadcast)
+  onData(connection) {
+    connection.on('data', data => {
+      const dataObj = JSON.parse(data);
+
+      switch(dataObj.type) {
+        case 'connRequest':
+          this.evaluateRequest(dataObj.peerId, dataObj.siteId);
+          break;
+        case 'syncResponse':
+          this.processOutgoingBuffer(dataObj.peerId);
+          this.controller.handleSync(dataObj);
+          break;
+        case 'syncCompleted':
+          this.processOutgoingBuffer(dataObj.peerId);
+          break;
+        case 'add to network':
+          this.controller.addToNetwork(dataObj.newPeer, dataObj.newSite);
+          break;
+        case 'remove from network':
+          this.controller.removeFromNetwork(dataObj.oldPeer);
+          break;
+        default:
+          this.controller.handleRemoteOperation(dataObj);
+      }
+    });
+  }
+// connect to others
+  addToOutConns(connection) {
+    if (!!connection && !this.isAlreadyConnectedOut(connection)) {
+      this.outConns.push(connection);
+    }
+  }
+
+  isAlreadyConnectedOut(connection) {
+    if (connection.peer) {
+      return !!this.outConns.find(conn => conn.peer === connection.peer);
+    } else {
+      return !!this.outConns.find(conn => conn.peer.id === connection);
+    }
+  }
+
+  randomId() {
+    const possConns = this.inConns.filter(conn => {
+      return this.peer.id !== conn.peer;
+    });
+    const randomIdx = Math.floor(Math.random() * possConns.length);
+    if (possConns[randomIdx]) {
+      return possConns[randomIdx].peer;
+    } else {
+      return false;
+    }
+  }
+
+  addToNetwork(peerId, siteId) {
+    this.send({
+      type: "add to network",
+      newPeer: peerId,
+      newSite: siteId
+    });
+  }
+
+  addToOutgoingBuffer(operation) {
+    if (this.outgoingBuffer.length === this.MAX_BUFFER_SIZE) {
+      this.outgoingBuffer.shift();
+    }
+
+    this.outgoingBuffer.push(operation);
+  }
+
 }
 
 /* harmony default export */ var broadcast = (BroadCast);
@@ -18484,7 +18597,64 @@ class controller_Controller {
   }
 
   broadcast(char) {}
+
+  addToNetwork(peerId, siteId, doc=document)
+  {
+    if (!this.network.find(obj => obj.siteId === siteId)) {
+      this.network.push({ peerId, siteId });
+      if (siteId !== this.siteId) {
+        this.addToListOfPeers(siteId, peerId, doc);
+      }
+
+      this.broadcast.addToNetwork(peerId, siteId);
+    }
+  }
+
+
+  addToListOfPeers(siteId, peerId, doc=document) {
+    const listItem = doc.createElement('li');
+    const node = doc.createElement('span');
+
+// // purely for mock testing purposes
+    //   let parser;
+    //   if (typeof DOMParser === 'object') {
+    //     parser = new DOMParser();
+    //   } else {
+    //     parser = {
+    //       parseFromString: function() {
+    //         return { firstChild: doc.createElement('div') }
+    //       }
+    //     }
+    //   }
+
+    const parser = new DOMParser();
+
+    const color = generateItemFromHash(siteId, CSS_COLORS);
+    const name = generateItemFromHash(siteId, ANIMALS);
+
+    // COMMENTED OUT: Video editor does not work
+    // const phone = parser.parseFromString(Feather.icons.phone.toSvg({ class: 'phone' }), "image/svg+xml");
+    // const phoneIn = parser.parseFromString(Feather.icons['phone-incoming'].toSvg({ class: 'phone-in' }), "image/svg+xml");
+    // const phoneOut = parser.parseFromString(Feather.icons['phone-outgoing'].toSvg({ class: 'phone-out' }), "image/svg+xml");
+    // const phoneCall = parser.parseFromString(Feather.icons['phone-call'].toSvg({ class: 'phone-call' }), "image/svg+xml");
+
+    node.textContent = name;
+    node.style.backgroundColor = color;
+    node.classList.add('peer');
+
+    // this.attachVideoEvent(peerId, listItem);
+
+    listItem.id = peerId;
+    listItem.appendChild(node);
+    // listItem.appendChild(phone.firstChild);
+    // listItem.appendChild(phoneIn.firstChild);
+    // listItem.appendChild(phoneOut.firstChild);
+    // listItem.appendChild(phoneCall.firstChild);
+    doc.querySelector('#peerId').appendChild(listItem);
+  }
 }
+
+
 
 /* harmony default export */ var src_controller = (controller_Controller);
 
