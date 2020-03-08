@@ -1,4 +1,4 @@
-import { random, some, remove, last, head } from "lodash";
+import { random, some, remove, last, head, concat } from "lodash";
 /**
  *
  * @param {{val: string, counter: int, id: int, pos: array}} char1

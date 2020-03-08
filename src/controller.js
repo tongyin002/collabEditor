@@ -1,6 +1,6 @@
 import { v4 as uuidv4 } from "uuid";
 import Peer from "peerjs";
-import { forEach, cloneDeep, concat } from "lodash";
+import { forEach, cloneDeep, concat, random, map, indexOf } from "lodash";
 
 import Editor from "./editor";
 import CRDT from "./crdt";
@@ -126,8 +126,8 @@ class Controller {
   }
 
   addMember(peerId, id) {
-    if (!this.members.get(id)) {
-      this.members.set(id, peerId);
+    if (!this.members.get(peerId)) {
+      this.members.set(peerId, id);
     }
     this.broadcast.addMember(peerId, id);
   }
@@ -188,6 +188,35 @@ class Controller {
     }
 
     this.editor.deleteText(char.val, locs);
+  }
+
+  dropMember(peerId) {
+    if (this.members.get(peerId)) {
+      this.members.delete(peerId);
+      this.broadcast.dropMember(peerId);
+    }
+  }
+
+  reachOutOthers() {
+    let connected = map(this.broadcast.connsForSend, conn => {
+      return conn.peer;
+    });
+
+    const iterator = this.members[Symbol.iterator]();
+    let unconnected = [];
+    for (let pair of iterator) {
+      if (indexOf(connected, pair[0]) === -1 && pair[0] !== this.peer.id)
+        unconnected.push(pair[0]);
+    }
+
+    if (unconnected.length === 0) {
+      this.broadcast.peer.on("connection", conn => {
+        this.updateURL(conn.peer);
+      });
+    } else {
+      let index = random(0, unconnected.length - 1);
+      this.broadcast.requestConnect(unconnected[index], this.peer.id);
+    }
   }
 }
 

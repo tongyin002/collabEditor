@@ -1,4 +1,4 @@
-import { filter, random, find } from "lodash";
+import { filter, random, find, remove } from "lodash";
 import { hasTooManyConns, addToConnArr } from "./util";
 
 class BroadCast {
@@ -79,8 +79,40 @@ class BroadCast {
           case "Delete":
             this.controller.workOnOp(dataObj);
             break;
+          case "Drop Member":
+            this.controller.dropMember(dataObj.dropped);
+            break;
           default:
             break;
+        }
+      });
+
+      //on connection close
+      connection.on("close", () => {
+        remove(this.connsForReceive, conn => {
+          return conn.peer === connection.peer;
+        });
+        remove(this.connsForSend, conn => {
+          return conn.peer === connection.peer;
+        });
+        this.dropMember(connection.peer);
+
+        if (connection.peer === this.controller.targetPeerId) {
+          if (this.connsForSend.length > 0) {
+            let rid = this.connsForSend[random(0, this.connsForSend.length - 1)]
+              .peer;
+            this.controller.updateURL(rid);
+          }
+        }
+
+        if (
+          !hasTooManyConns(
+            this.controller.members,
+            this.connsForReceive,
+            this.connsForSend
+          )
+        ) {
+          this.controller.reachOutOthers();
         }
       });
     });
@@ -161,6 +193,14 @@ class BroadCast {
         connection.send(JSON.stringify(dataObj));
       });
     }
+  }
+
+  dropMember(peerId) {
+    this.send({
+      type: "Drop Member",
+      dropped: peerId
+    });
+    this.controller.dropMember(peerId);
   }
 }
 
