@@ -1,6 +1,6 @@
 import { v4 as uuidv4 } from "uuid";
 import Peer from "peerjs";
-import { forEach, cloneDeep } from "lodash";
+import { forEach, cloneDeep, concat } from "lodash";
 
 import Editor from "./editor";
 import CRDT from "./crdt";
@@ -151,7 +151,8 @@ class Controller {
       this.crdt.data = cloneDeep(dataObj.crdtData);
       this.editor.replaceText(this.crdt.getText());
 
-      this.vector.versions = cloneDeep(dataObj.versions);
+      let versions = cloneDeep(dataObj.versions);
+      this.vector.versions = concat(this.vector.versions, versions);
     }
 
     this.broadcast.sendCopyCompleted(dataObj.peerId);

@@ -176,14 +176,13 @@ function findInsertLoc(char, dataArr) {
   if (
     !firstLine ||
     firstLine.length == 0 ||
-    compareChars(char, firstLine[0]) < 0
+    compareChars(char, head(firstLine)) < 0
   ) {
     return { line: 0, ch: 0 };
   }
 
-  let lastChar = lastLine[lastLine.length - 1];
-  if (compareChars(char, lastChar) > 0) {
-    return lastChar.val === "\n"
+  if (compareChars(char, last(lastLine)) > 0) {
+    return last(lastLine).val === "\n"
       ? { line: bottom + 1, ch: 0 }
       : { line: bottom, ch: lastLine.length };
   }
@@ -191,11 +190,10 @@ function findInsertLoc(char, dataArr) {
   while (top < bottom - 1) {
     let mid = Math.floor(top + (bottom - top) / 2);
     let line = dataArr[mid];
-    lastChar = line[line.length - 1];
 
-    if (compareChars(char, lastChar) === 0) {
+    if (compareChars(char, last(line)) === 0) {
       return { line: mid, ch: line.length - 1 };
-    } else if (compareChars(char, lastChar) < 0) {
+    } else if (compareChars(char, last(line)) < 0) {
       bottom = mid;
     } else {
       top = mid;
