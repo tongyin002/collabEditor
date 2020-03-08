@@ -6,7 +6,6 @@ import { BroadCastService } from "./broadcast_service";
 
 class Controller {
   constructor(host, targetPeerId, elementId) {
-    // TODO(shirleyxt): switch back siteId once finished testing.
     this.host = host;
     this.siteId = this.generateUUID();
     this.editor = new Editor(this, elementId);
@@ -27,18 +26,6 @@ class Controller {
       },
       debug: 1
     });
-    // this.broadcastService = boradcastService;
-    // this.broadcastService.registerController(
-    //   this.siteId,
-    //   char => {
-    //     this.crdt.insertChar(char);
-    //     this.updateEditor();
-    //   },
-    //   char => {
-    //     this.crdt.deleteChar(char);
-    //     this.updateEditor();
-    //   }
-    // );
 
     this.broadcast = new BroadCast(this, this.peer);
     this.broadcast.bindServerEvents(targetPeerId);
