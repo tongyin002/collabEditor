@@ -6,16 +6,36 @@
     <title>Collab Editor</title>
     <link
       rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/bulma@0.8.0/css/bulma.min.css"
+    />
+    <link
+      rel="stylesheet"
       href="https://unpkg.com/easymde/dist/easymde.min.css"
     />
   </head>
-
   <body>
-    <section>
-      <h2>Shareable Link:</h2>
-      <p id="link"></p>
+    <section class="section">
+      <div class="container is-widescreen">
+        <div class="tile is-ancestor">
+          <div class="tile is-parent is-3 is-vertical">
+            <div class="tile is-child box notification is-info">
+              <p class="title">Collab Editor</p>
+            </div>
+            <div class="tile is-child box">
+              <p class="subtitle">share this link:</p>
+              <input id="link" type="text" class="input is-rounded " readonly />
+            </div>
+          </div>
+
+          <div class="tile is-parent">
+            <div class="tile is-child box">
+              <textarea id="editor"></textarea>
+            </div>
+          </div>
+        </div>
+      </div>
     </section>
-    <textarea id="editor"></textarea>
+
     <script src="./main.js"></script>
   </body>
 </html>

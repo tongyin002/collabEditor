@@ -6,7 +6,8 @@ class Editor {
   constructor(controller) {
     this.canvas = new EasyMde({
       element: document.getElementById("editor"),
-      toolbar: false
+      toolbar: false,
+      minHeight: "500px"
     });
 
     // replace default key tab to 4 spaces

@@ -13,7 +13,7 @@ class BroadCast {
     this.peer.on("open", id => {
       // update shared link
       let ptag = document.getElementById("link");
-      ptag.textContent = this.controller.host + "?" + id;
+      ptag.value = this.controller.host + "?" + id;
 
       this.onConnect();
       this.onDisconnect();
