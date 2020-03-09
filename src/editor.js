@@ -35,6 +35,7 @@ class Editor {
         case "undo":
           this.handleLocalRedoUndo(changeObj);
           break;
+        case "*compose":
         case "+input":
         case "paste":
           this.handleLocalInsert(changeObj);

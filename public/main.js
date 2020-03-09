@@ -35310,7 +35310,7 @@ function createBetween(val1, val2, plan) {
 }
 
 function mergeTwoLines(dataArr, from) {
-  let merged = concat(dataArr[from.line], dataArr[from.line + 1]);
+  let merged = Object(lodash["concat"])(dataArr[from.line], dataArr[from.line + 1]);
   dataArr.splice(from.line, 2, merged);
 }
 
@@ -35354,14 +35354,13 @@ function findInsertLoc(char, dataArr) {
   if (
     !firstLine ||
     firstLine.length == 0 ||
-    compareChars(char, firstLine[0]) < 0
+    compareChars(char, Object(lodash["head"])(firstLine)) < 0
   ) {
     return { line: 0, ch: 0 };
   }
 
-  let lastChar = lastLine[lastLine.length - 1];
-  if (compareChars(char, lastChar) > 0) {
-    return lastChar.val === "\n"
+  if (compareChars(char, Object(lodash["last"])(lastLine)) > 0) {
+    return Object(lodash["last"])(lastLine).val === "\n"
       ? { line: bottom + 1, ch: 0 }
       : { line: bottom, ch: lastLine.length };
   }
@@ -35369,11 +35368,10 @@ function findInsertLoc(char, dataArr) {
   while (top < bottom - 1) {
     let mid = Math.floor(top + (bottom - top) / 2);
     let line = dataArr[mid];
-    lastChar = line[line.length - 1];
 
-    if (compareChars(char, lastChar) === 0) {
+    if (compareChars(char, Object(lodash["last"])(line)) === 0) {
       return { line: mid, ch: line.length - 1 };
-    } else if (compareChars(char, lastChar) < 0) {
+    } else if (compareChars(char, Object(lodash["last"])(line)) < 0) {
       bottom = mid;
     } else {
       top = mid;
@@ -35499,6 +35497,7 @@ class editor_Editor {
         case "undo":
           this.handleLocalRedoUndo(changeObj);
           break;
+        case "*compose":
         case "+input":
         case "paste":
           this.handleLocalInsert(changeObj);
@@ -35895,8 +35894,40 @@ class broadcast_BroadCast {
           case "Delete":
             this.controller.workOnOp(dataObj);
             break;
+          case "Drop Member":
+            this.controller.dropMember(dataObj.dropped);
+            break;
           default:
             break;
+        }
+      });
+
+      //on connection close
+      connection.on("close", () => {
+        Object(lodash["remove"])(this.connsForReceive, conn => {
+          return conn.peer === connection.peer;
+        });
+        Object(lodash["remove"])(this.connsForSend, conn => {
+          return conn.peer === connection.peer;
+        });
+        this.dropMember(connection.peer);
+
+        if (connection.peer === this.controller.targetPeerId) {
+          if (this.connsForSend.length > 0) {
+            let rid = this.connsForSend[Object(lodash["random"])(0, this.connsForSend.length - 1)]
+              .peer;
+            this.controller.updateURL(rid);
+          }
+        }
+
+        if (
+          !hasTooManyConns(
+            this.controller.members,
+            this.connsForReceive,
+            this.connsForSend
+          )
+        ) {
+          this.controller.reachOutOthers();
         }
       });
     });
@@ -35978,6 +36009,14 @@ class broadcast_BroadCast {
       });
     }
   }
+
+  dropMember(peerId) {
+    this.send({
+      type: "Drop Member",
+      dropped: peerId
+    });
+    this.controller.dropMember(peerId);
+  }
 }
 
 /* harmony default export */ var broadcast = (broadcast_BroadCast);
@@ -36009,8 +36048,8 @@ class controller_Controller {
           { url: "stun:stun1.l.google.com:19302" },
           {
             url: "turn:numb.viagenie.ca",
-            credential: "conclave-rulez",
-            username: "sunnysurvies@gmail.com"
+            credential: "2020coen317",
+            username: "shirleyxt0225@gmail.com"
           }
         ]
       },
@@ -36111,10 +36150,10 @@ class controller_Controller {
   }
 
   addMember(peerId, id) {
-    if (!this.members.get(id)) {
-      this.members.set(id, peerId);
+    if (!this.members.get(peerId)) {
+      this.members.set(peerId, id);
+      this.broadcast.addMember(peerId, id);
     }
-    this.broadcast.addMember(peerId, id);
   }
 
   updateURL(id) {
@@ -36136,7 +36175,8 @@ class controller_Controller {
       this.crdt.data = Object(lodash["cloneDeep"])(dataObj.crdtData);
       this.editor.replaceText(this.crdt.getText());
 
-      this.vector.versions = Object(lodash["cloneDeep"])(dataObj.versions);
+      let versions = Object(lodash["cloneDeep"])(dataObj.versions);
+      this.vector.versions = Object(lodash["concat"])(this.vector.versions, versions);
     }
 
     this.broadcast.sendCopyCompleted(dataObj.peerId);
@@ -36172,6 +36212,35 @@ class controller_Controller {
     }
 
     this.editor.deleteText(char.val, locs);
+  }
+
+  dropMember(peerId) {
+    if (this.members.get(peerId)) {
+      this.members.delete(peerId);
+      this.broadcast.dropMember(peerId);
+    }
+  }
+
+  reachOutOthers() {
+    let connected = Object(lodash["map"])(this.broadcast.connsForSend, conn => {
+      return conn.peer;
+    });
+
+    const iterator = this.members[Symbol.iterator]();
+    let unconnected = [];
+    for (let pair of iterator) {
+      if (Object(lodash["indexOf"])(connected, pair[0]) === -1 && pair[0] !== this.peer.id)
+        unconnected.push(pair[0]);
+    }
+
+    if (unconnected.length === 0) {
+      this.broadcast.peer.on("connection", conn => {
+        this.updateURL(conn.peer);
+      });
+    } else {
+      let index = Object(lodash["random"])(0, unconnected.length - 1);
+      this.broadcast.requestConnect(unconnected[index], this.peer.id);
+    }
   }
 }
 

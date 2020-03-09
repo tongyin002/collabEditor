@@ -24,8 +24,8 @@ class Controller {
           { url: "stun:stun1.l.google.com:19302" },
           {
             url: "turn:numb.viagenie.ca",
-            credential: "conclave-rulez",
-            username: "sunnysurvies@gmail.com"
+            credential: "2020coen317",
+            username: "shirleyxt0225@gmail.com"
           }
         ]
       },
@@ -128,8 +128,8 @@ class Controller {
   addMember(peerId, id) {
     if (!this.members.get(peerId)) {
       this.members.set(peerId, id);
+      this.broadcast.addMember(peerId, id);
     }
-    this.broadcast.addMember(peerId, id);
   }
 
   updateURL(id) {
