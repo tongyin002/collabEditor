@@ -6,7 +6,7 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "build": "webpack",
-    "start": "npm run build && node app.js"
+    "start": "npm i && npm run build && node app.js"
   },
   "keywords": [],
   "author": "",
@@ -15,9 +15,12 @@
     "easymde": "^2.9.0",
     "express": "^4.17.1",
     "lodash": "^4.17.15",
+    "uuid": "^7.0.1",
     "peer": "^0.2.10",
     "peerjs": "^1.2.0",
-    "uuid": "^7.0.1"
+    "start": "^5.1.0",
+    "webpack": "^4.41.6",
+    "webpack-cli": "^3.3.11"
   },
   "devDependencies": {
     "webpack": "^4.41.6",
