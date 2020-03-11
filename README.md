@@ -2,13 +2,9 @@
 
 ## steps to set up locally
 
-Make sure that node and npm are installed (ideally the last LTS version). Go inside the folder and install all dependencies with:
+Make sure that node and npm are installed (ideally the last LTS version).
 
-```
-npm i
-```
-
-Then, build and start the server with:
+Simply, build and start the server with:
 
 ```
 npm start
